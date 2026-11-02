@@ -80,7 +80,9 @@ def build(SSX3_iso: Path, tricky_iso: Path, output: Path) -> dict:
     # Follow Race scenery dependencies before assigning native IDs. Compact
     # local tables avoid sparse slots that native resource loops can visit.
     source_models = {pbd["instances"][index]["model_id"] for index in race_instances}
-    source_materials = {patch["texture_assignment"] for patch in pbd["patches"]}
+    # Tricky terrain TextureAssignment indexes SSH images directly.
+    # Only prefab meshes use the separate material table.
+    source_materials = set()
     for index in source_models:
         for part in models[index]["objects"]:
             source_materials.update(mesh["material"] for mesh in part["meshes"])
@@ -90,7 +92,8 @@ def build(SSX3_iso: Path, tricky_iso: Path, output: Path) -> dict:
                  if material["index"] in source_materials]
     if len(materials) != len(material_ids):
         raise FormatError("Race geometry references a missing source material")
-    source_textures = {material["texture_id"] for material in materials}
+    source_textures = {patch["texture_assignment"] for patch in pbd["patches"]}
+    source_textures.update(material["texture_id"] for material in materials)
     source_lightmaps = {patch["lightmap_id"] for patch in pbd["patches"]}
     aip, starter_paths = convert_tricky_aip(
         read_cofb_member(tricky_archive, "data/models/gari.aip"),
@@ -163,8 +166,8 @@ def build(SSX3_iso: Path, tricky_iso: Path, output: Path) -> dict:
     world_min = [math.inf] * 3
     world_max = [-math.inf] * 3
     for patch in pbd["patches"]:
-        if patch["texture_assignment"] not in material_ids:
-            raise FormatError("Garibaldi patch references a missing material")
+        if patch["texture_assignment"] not in texture_ids:
+            raise FormatError("Garibaldi patch references a missing SSH image")
         if patch["lightmap_id"] not in lightmap_ids:
             raise FormatError("Garibaldi patch references a missing lightmap")
         bounds_min, bounds_max = conservative_patch_bounds(patch)
@@ -183,9 +186,7 @@ def build(SSX3_iso: Path, tricky_iso: Path, output: Path) -> dict:
             geometry, prefix=prefix,
             object_id=bytes([section_id]) + rid.to_bytes(3, "little"),
             u10=section_id << 8, chunk_id=leaf_id,
-            # Terrain binds a TexMan image ID directly, unlike MDR meshes
-            # whose material index resolves through the model's table.
-            texture_rid=texture_base + pbd["materials"][patch["texture_assignment"]]["texture_id"],
+            texture_rid=texture_base + patch["texture_assignment"],
             lightmap_rid=lightmap_base + patch["lightmap_id"],
             tail=patch_tail,
         )

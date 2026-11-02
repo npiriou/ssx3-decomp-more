@@ -113,8 +113,8 @@ The ordinary pause-menu Quit path reaches the same cleanup point.
 | Resource | Imported amount | Native representation |
 | --- | ---: | --- |
 | Terrain | 3,885 patches | Type 1 bicubic Bezier patches |
-| Materials | 117 | Type 0 WorldMaterial |
-| Textures / lightmaps | 53 / 16 | Shared type 9 / 10 resources |
+| Materials | 116 | Type 0 WorldMaterial |
+| Textures / lightmaps | 104 / 16 | Shared type 9 / 10 resources |
 | Models | 627, with 699 hierarchical parts | Type 2 MDR meshes |
 | Race instances | 3,236 of 3,393 source instances | Type 3 instances |
 | Mesh collision resources | 412 | Type 12 triangle meshes |
@@ -136,13 +136,14 @@ Showoff-only instances are excluded.
 
 The builder follows Race instances to their models, material assignments and
 texture references before packaging. It imports 627 of the 648 source
-models, 117 of 125 materials and 53 of 121 textures. Local model/material IDs
+models, 116 of 125 materials and 104 of 121 textures. Local model/material IDs
 are compacted together; the generated manifest preserves source-to-native
 ID maps. Shared texture IDs retain their source offsets in the appended
 global range. No model or material reference points into a removed slot.
-Terrain stores the global texture ID directly; its source material is
-dereferenced during conversion. MDR meshes retain their local material
-indices and resolve them through the native model material table.
+Tricky terrain `TextureAssignment` already indexes the SSH image table.
+Terrain stores that image ID plus the appended global texture base; it must
+not pass through the prefab material table. MDR meshes retain their local
+material indices and resolve them through the native model material table.
 
 Tricky's linear 8-bit texels use native TexMan format 9; source entries
 already marked as pre-swizzled retain their bytes and use format 10.
@@ -151,8 +152,8 @@ image/palette headers explicitly store their relative data offset at +0x10;
 the 0x1000 flag requires that offset rather than an implicit header size.
 Lightmaps remain linear 32-bit images with the same offset convention.
 
-The resulting texture leaf is 1,833,768 unpacked bytes and the shared world
-stream is 5,361,088 bytes. Native shared textures use the separate
+The resulting texture leaf is 2,735,040 unpacked bytes and the shared world
+stream is 5,361,060 bytes. Native shared textures use the separate
 `BxStream SHAREDMEM` allocator. Terrain, models, instances and collision data
 use the section allocator; textures do not consume its fixed 128 KiB blocks.
 The single texture leaf is retained for this first course. Spatial subdivision
