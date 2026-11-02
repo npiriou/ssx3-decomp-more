@@ -114,6 +114,21 @@ does not fabricate them or claim that these geometry payloads form a loadable
 world. The terrain bounds and conservative sphere can be derived from the
 Tricky source, but the runtime mapping still needs validation.
 
+The route converter produces an SSX 3 type-14 `WorldAIP` body from Tricky's
+path records:
+
+```powershell
+py tools/ssx3_aip.py --iso $env:SSX_TRICKY_ISO --output .cache\gari.aip14
+```
+
+Its structural parser accepts both retail SSX 3 ARA1 AIP (129 AI paths,
+eight race paths, six and 14 trailing records) and the converted Garibaldi
+AIP (90 AI paths, 14 race paths). The six Tricky starter path indices are
+reported separately. SSX 3's trailing tables appear to include start and
+course positions, but their gameplay meaning has not been established;
+the converter leaves them empty instead of guessing. This AIP body is a
+component for a future world stream, not a race that can be launched yet.
+
 ## Integration boundaries
 
 - `crates/ssx3-game/src/custom_tracks.rs` is now a host-owned catalog with a
