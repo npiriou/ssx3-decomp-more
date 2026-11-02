@@ -27,6 +27,8 @@ pub mod anim;
 #[cfg(feature = "audio")]
 pub mod audio;
 pub mod call;
+/// Stable host IDs for additional Single Event peaks and courses.
+pub mod custom_tracks;
 #[cfg(feature = "camera")]
 pub mod camera;
 /// Debug-only overrides behind environment switches.

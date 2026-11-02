@@ -116,6 +116,11 @@ Tricky source, but the runtime mapping still needs validation.
 
 ## Integration boundaries
 
+- `crates/ssx3-game/src/custom_tracks.rs` is now a host-owned catalog with a
+  `Bonus` peak and a `Garibaldi` race entry, using stable string IDs and a
+  Tricky archive source. It has lookup APIs for future menu integration. It
+  does **not** yet register that peak with the live Single Event screen or
+  start a race. Its IDs cannot index the original 17-entry course table.
 - `crates/ssx3-game/src/event_boot.rs` scans three peaks from the original
   event tables. This is a debug boot path, not the menu architecture.
 - `crates/ssx3-game/src/game/fe/uitemplatemap.rs` handles three original peak
