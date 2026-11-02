@@ -256,6 +256,13 @@ prefix and tail fields come from a retail spline template. Those extra fields
 still need gameplay interpretation. No Tricky physics or gameplay scripts
 are executed.
 
+`tools/tricky_models.py` now decodes Garibaldi's 648 prefab models into
+740 hierarchical parts, 45,866 vertices and 29,617 nondegenerate triangles.
+It retains normals, UVs, strip boundaries, material assignments, local matrices
+and parent IDs. The extracted source meshes are in ignored
+`.cache/gari-prefabs.json`. They are not yet written as target MDR resources or
+connected to the 3,393 Tricky instances. Source animations are metadata only.
+
 ## Work still required for a playable race
 
 1. Verify the provisional Tricky material/surface mapping, texture rendering,
