@@ -102,6 +102,18 @@ resource stream and the leaf resource mapping. The probe validates each
 stream's SDB counts against the SSB records and checks child indices within
 the selected location's tree.
 
+`tools/ssx3_world_build.py` now writes SSB resource headers, uncompressed
+RefPack literal blocks and the known 432-byte patch geometry layout. Its
+encoder was verified by decoding a rebuilt 5,155,109-byte ARA1 resource
+stream to the same SHA-256 as the original. Repacking each of ARA1's 1,913
+terrain patch payloads with the original metadata reproduced every payload
+byte for byte. All 3,885 Garibaldi patches also fit the target geometry layout
+without changing a coefficient value. The writer requires explicit patch
+metadata for material IDs, section IDs and unknown header/tail fields; it
+does not fabricate them or claim that these geometry payloads form a loadable
+world. The terrain bounds and conservative sphere can be derived from the
+Tricky source, but the runtime mapping still needs validation.
+
 ## Integration boundaries
 
 - `crates/ssx3-game/src/event_boot.rs` scans three peaks from the original
