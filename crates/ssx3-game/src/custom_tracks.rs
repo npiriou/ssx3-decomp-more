@@ -71,6 +71,7 @@ static LEASED_MAP_SLOT: AtomicU32 = AtomicU32::new(u32::MAX);
 static BONUS_SELECTED: AtomicBool = AtomicBool::new(false);
 static ASSETS_AVAILABLE: AtomicBool = AtomicBool::new(false);
 static TRACK_INFO: AtomicU32 = AtomicU32::new(0);
+static MENU_ACTION_FRAME: AtomicU32 = AtomicU32::new(u32::MAX);
 // The template's native loading code consumes one fixed 40-byte residency
 // row. Lease it while the custom event is active and restore it on return.
 // Its sky and shared transport assets remain native; its terrain connectors
@@ -97,7 +98,8 @@ pub fn prepare_track_info(c: &mut Cpu, back: u32) -> crate::call::Flow {
             let value = c.bus.read8(TEMPLATE + offset);
             c.bus.write8(pointer + offset, value);
         }
-        let name = b"kT_CustomGaribaldiName\0";
+        // TrackInfo contains a display name, whereas UIText uses locale IDs.
+        let name = b"Garibaldi\0";
         for offset in 0..48 {
             c.bus.write8(
                 pointer + 4 + offset,
@@ -132,6 +134,13 @@ pub fn select_bonus_peak() {
 
 pub fn bonus_peak_selected() -> bool {
     BONUS_SELECTED.load(Ordering::Acquire)
+}
+
+/// Newly enabled menus occur later in the screen's input traversal. Consume
+/// the current press once so it cannot also accept Race and Garibaldi.
+pub fn accept_menu_step(c: &mut Cpu) -> bool {
+    let frame = crate::tick::vsync_count(c);
+    MENU_ACTION_FRAME.swap(frame, Ordering::AcqRel) != frame
 }
 
 pub fn peak(id: &str) -> Option<&'static CustomPeak> {

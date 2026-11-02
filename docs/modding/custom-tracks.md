@@ -48,7 +48,7 @@ hard link to the image under `X:\dev\ssx3`.
 `crates/ssx3-game/src/custom_tracks.rs` owns stable peak/course string IDs,
 source metadata and the active custom event. Custom IDs never index the
 original 17-entry TrackInfo or career tables. A separate 100-byte TrackInfo
-copy supplies the Garibaldi locale key while retaining bounded native race
+copy supplies the Garibaldi display name while retaining bounded native race
 setup fields. SSX 3 remains responsible for riders, physics, tricks, controls,
 HUD, camera, countdown, progression, respawn and results.
 
@@ -57,7 +57,10 @@ The native UI additions live in the derived FE.LUI and locale file:
 - A Bonus widget extends the existing peak list without changing the original
   three peak indices or their native default selection.
 - Separate one-item native lists contain Race and Garibaldi. Their callbacks,
-  focus, text and visibility use the existing UI methods.
+  focus, text and visibility use the existing UI methods. They belong to the
+  native `SelectPeakGoal` and `SelectEvent` containers, and their text is
+  refreshed after the native panel pass. One accept press advances one menu
+  step, even when the new list occurs later in the same input traversal.
 - Custom selection bypasses career locks. Native peak indices stay within
   their original bounds. The category is available in Single Event front-end
   flows, outside Conquer the Mountain progression.
@@ -65,6 +68,12 @@ The native UI additions live in the derived FE.LUI and locale file:
 `bonus_menu_mode.rs`, `custom_peak_widgets.rs`, `custom_ui_objects.rs` and
 `custom_ui_screen.rs` implement the corresponding native UI functions;
 `game/fe/uitemplatemap.rs` connects selection to the standard race flow.
+The edited RefPack block retains its original alignment modulo 16 so the
+following texture and font banks remain valid for native aligned loads.
+The world stream also uses fixed 32 KiB CBXS/CEND envelopes, including end
+padding. Literal RefPack data is split to fit that compressed read size, and
+each appended stream begins at a 32 KiB boundary. Larger compressed blocks
+overrun the native reader and corrupt models during loading.
 
 The derived BAM appends a world location named `GARI` and preserves the
 original locations and stream bytes. Its world index is 49. SectionMan has

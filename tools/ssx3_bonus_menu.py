@@ -92,7 +92,7 @@ def add_peak_to_screen(screen: bytes) -> bytes:
     if len(source) != 68 or struct.unpack_from("<H", source, 18)[0] != 50:
         raise FormatError("Peak1 layout differs from the USA disc")
     struct.pack_into("<I", bonus_property, 4, PEAK4)
-    struct.pack_into("<h", bonus_property, 18, -25)
+    struct.pack_into("<h", bonus_property, 18, 75)
     properties.insert(properties.index(source) + 1, bonus_property)
     peak_list_property = _row(properties, PEAK_LIST)
     if struct.unpack_from("<H", peak_list_property, 38)[0] != 120:
@@ -101,11 +101,11 @@ def add_peak_to_screen(screen: bytes) -> bytes:
 
     # Separate native UIMenu objects keep the custom panels out of the
     # original three-peak event arrays. Each contains exactly one item.
-    for old_root, new_root, new_child, text in (
+    for old_root, new_root, new_child, text, parent_name in (
             (str_hash("SPG_Peak1Goals"), BONUS_GOALS,
-             BONUS_RACE_ITEM, None),
+             BONUS_RACE_ITEM, None, "SelectPeakGoal"),
             (str_hash("Peak1RaceLocations"), BONUS_RACE,
-             GARIBALDI_ITEM, GARIBALDI_TEXT)):
+             GARIBALDI_ITEM, GARIBALDI_TEXT, "SelectEvent")):
         root = _row(first, old_root)
         child_name = struct.unpack_from("<I", root, 36)[0]
         child = bytearray(_row(first, child_name))
@@ -116,7 +116,16 @@ def add_peak_to_screen(screen: bytes) -> bytes:
         struct.pack_into("<I", child, 4, new_child)
         if text is not None:
             struct.pack_into("<I", child, 36, text)
-        first.extend((child, new_menu))
+        # Containers drive native visibility and input. Create the new menu
+        # before its container, then link it alongside the original menus.
+        parent = _row(first, str_hash(parent_name))
+        parent_index = first.index(parent)
+        first[parent_index:parent_index] = (child, new_menu)
+        if struct.unpack_from("<H", parent)[0] != 0x10:
+            raise FormatError("Event Select panel container is not a UI group")
+        parent[32] += 1
+        parent.extend(struct.pack("<I", new_root))
+        struct.pack_into("<H", parent, 2, len(parent))
         for old_name, new_name in ((child_name, new_child), (old_root, new_root)):
             layout = bytearray(_row(properties, old_name))
             struct.pack_into("<I", layout, 4, new_name)
@@ -188,6 +197,11 @@ def add_bonus_screen(data: bytes) -> bytes:
     end = screen_table + entries[index + 1][1]
     original = decode_refpack(data[begin:end])
     replacement = encode_refpack_literals(add_peak_to_screen(original))
+    # Native word loads align their address down. Keep every following bank
+    # at its original alignment when a compressed screen grows; otherwise
+    # the texture count is read from adjacent bytes. RefPack stops at its
+    # end marker, so trailing block padding is not part of the screen.
+    replacement += b"\0" * ((end - begin - len(replacement)) % 16)
     delta = len(replacement) - (end - begin)
     output = bytearray(data[:begin] + replacement + data[end:])
     struct.pack_into("<I", output, 16, object_table + delta)

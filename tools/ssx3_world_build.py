@@ -29,20 +29,26 @@ def encode_refpack_literals(data: bytes) -> bytes:
     return bytes(out)
 
 
-def encode_stream(data: bytes, block_bytes: int = 128 * 1024) -> bytes:
-    """Wrap uncompressed resources in the SSB CBXS/CEND block format."""
+def encode_stream(data: bytes, block_bytes: int = 32 * 1024) -> bytes:
+    """Wrap resources in 32 KiB read blocks, limiting expanded bytes per block."""
     if not 1 <= block_bytes <= 0xFFFFFF:
         raise ValueError("block_bytes must fit RefPack's 24-bit length")
+    read_bytes = 32 * 1024
+    # Literal commands add one byte per 112 bytes, plus the RefPack header
+    # and end marker. The compressed envelope, not its expanded data, must
+    # fit the streamer's fixed-size read buffer.
+    raw_bytes = min(block_bytes, ((read_bytes - 8 - 6) * 112 // 113) & ~3)
     out = bytearray()
-    chunks = [data[pos:pos + block_bytes] for pos in range(0, len(data), block_bytes)]
+    chunks = [data[pos:pos + raw_bytes] for pos in range(0, len(data), raw_bytes)]
     if not chunks:
         chunks = [b""]
     for index, chunk in enumerate(chunks):
         packed = encode_refpack_literals(chunk)
         marker = b"CEND" if index == len(chunks) - 1 else b"CBXS"
         out.extend(marker)
-        out.extend(struct.pack("<I", len(packed) + 8))
+        out.extend(struct.pack("<I", read_bytes))
         out.extend(packed)
+        out.extend(b"\0" * (read_bytes - 8 - len(packed)))
     return bytes(out)
 
 

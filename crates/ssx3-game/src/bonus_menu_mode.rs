@@ -113,15 +113,20 @@ pub fn event_select_set_mode(c: &mut Cpu) {
     if c.pc != back || !crate::custom_tracks::assets_available() {
         return;
     }
+    guest(c, |c| refresh_catalog_panels(c, this, mode, back));
+}
+
+/// Native panel refresh also changes the containers and subtitle. Apply the
+/// custom choice after that pass while preserving its caller's registers.
+pub fn refresh_catalog_panels(c: &mut Cpu, this: u32, mode: u32, back: u32) -> Flow {
+    if !crate::custom_tracks::assets_available() { return Ok(()); }
     let registers = c.g;
     let floats = c.f;
-    guest(c, |c| {
-        sync_catalog_panels(c, this, mode, back)?;
-        c.g = registers;
-        c.f = floats;
-        c.pc = back;
-        Ok(())
-    });
+    sync_catalog_panels(c, this, mode, back)?;
+    c.g = registers;
+    c.f = floats;
+    c.pc = back;
+    Ok(())
 }
 
 fn catalog_object(c: &mut Cpu, this: u32, name: &[u8], back: u32)
@@ -174,11 +179,28 @@ fn sync_catalog_panels(c: &mut Cpu, this: u32, mode: u32, back: u32) -> Flow {
     };
     catalog_panel(c, this, original, false, back)?;
     catalog_panel(c, this, custom, true, back)?;
-    let title_object = catalog_object(c, this, b"title_title", back)?;
-    if title_object != 0 {
-        c.g[A0][0] = sx(title_object);
-        c.g[A1][0] = sx(crate::game::hashvalue::str_hash(title));
+    let (child, text): (&[u8], u32) = if mode == 1 {
+        (b"BonusRace", 0x032d_0353) // Native "Race" locale entry.
+    } else {
+        (b"BonusGaribaldi", crate::game::hashvalue::str_hash(b"kT_CustomGaribaldiName"))
+    };
+    let row = catalog_object(c, this, child, back)?;
+    if row != 0 {
+        c.g[A0][0] = sx(row);
+        c.g[A1][0] = sx(text);
         call_ptr(c, SET_TEXT_ID, back)?;
+        // These rows are absent from the native event-name refresh arrays.
+        // Resolve their text after the screen's locale/font owner is ready.
+        c.g[A0][0] = sx(row);
+        call_ptr(c, 0x003a_0528, back)?;
+    }
+    for name in [b"title_title".as_slice(), b"SubTitle".as_slice()] {
+        let title_object = catalog_object(c, this, name, back)?;
+        if title_object != 0 {
+            c.g[A0][0] = sx(title_object);
+            c.g[A1][0] = sx(crate::game::hashvalue::str_hash(title));
+            call_ptr(c, SET_TEXT_ID, back)?;
+        }
     }
     Ok(())
 }

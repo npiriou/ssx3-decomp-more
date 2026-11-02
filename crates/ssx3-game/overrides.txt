@@ -5431,3 +5431,12 @@
 0x0027a860    ScriptEngine_QueueFinishScripts
 0x0027ac60    ScriptEngine_QueueRaceCutscene
 0x003a8a90    cWorldCache_AllocResource
+0x003e4db8    EATimer_Rcnt1Handler
+0x003e4af0    EATimer_Init
+0x003e57f8    EATimer_AddCallback
+0x00398138    cUITextureBank_setData
+0x003ac048    cPS2ChunkResolve_PatchDmaChain
+0x003abf20    cPS2ChunkResolve_RelocateMeshDma
+0x003abfc0    cPS2ChunkResolve_RelocateMeshDmaPart
+0x003adc48    cPS2ChunkResolve_v08
+0x00202ad8    EventSelect_UpdateModePanels

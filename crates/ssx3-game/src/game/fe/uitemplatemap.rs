@@ -1213,6 +1213,9 @@ fn es_refresh_mode(c: &mut Cpu) -> Next {
     action::SET_MODE.call(c, 0x0020_21f4)?;
     c.g[A0][0] = c.g[S2][0];
     action::UPDATE_MODE_PANELS.call(c, 0x0020_21fc)?;
+    let mode = es_global(c, es::MODE).lw(c) as u32;
+    let this = c.g[S2][0] as u32;
+    crate::bonus_menu_mode::refresh_catalog_panels(c, this, mode, 0x0020_21fc)?;
     c.g[A0][0] = c.g[S2][0];
     action::UPDATE_CONFIRM_POPUP.call(c, 0x0020_2204)?;
     c.g[V0][0] = 0;
@@ -1233,6 +1236,9 @@ fn es_show_mode(c: &mut Cpu) -> Next {
     c.cycles += 6;
     c.g[A0][0] = c.g[S2][0];
     action::UPDATE_MODE_PANELS.call(c, 0x0020_23c4)?;
+    let mode = es_global(c, es::MODE).lw(c) as u32;
+    let this = c.g[S2][0] as u32;
+    crate::bonus_menu_mode::refresh_catalog_panels(c, this, mode, 0x0020_23c4)?;
     c.g[A0][0] = c.g[S2][0];
     if crate::custom_tracks::bonus_peak_selected() {
         action::HIDE_MAP_PIC.call(c, 0x0020_23cc)?;
@@ -1348,6 +1354,11 @@ fn es_highlight(c: &mut Cpu, this: u32, w: u32) -> Next {
         c.g[A1][0] = sx(w);
         c.g[A2][0] = 1;
         action::SET_HIGHLIGHT_COLOR.call(c, 0x0020_2510)?;
+        let mode = es_global(c, es::MODE).lw(c);
+        if mode == 1 || mode == 2 {
+            c.g[A0][0] = sx(if mode == 1 { 0x004a_25f8 } else { 0x004a_2600 });
+            return es_grow_highlight(c, this, w);
+        }
         c.g[V0][0] = 0;
         return Ok(Exit::Value);
     }
@@ -1613,6 +1624,7 @@ fn es_accept_peak(c: &mut Cpu, this: u32, w: u32) -> Next {
     if crate::custom_tracks::assets_available()
         && c.bus.read32(w.wrapping_add(0x38)) == 0x0056_b7e4
         && es_global(c, es::FLOW).lw(c) < 2 {
+        if !crate::custom_tracks::accept_menu_step(c) { return Ok(Exit::Zero); }
         crate::custom_tracks::select_bonus_peak();
         es_sound(c, 6, false, 0x0020_19b4)?;
         // Native layout calls keep a bounded guest peak. The host category
@@ -1840,6 +1852,7 @@ fn es_accept_tab(c: &mut Cpu, this: u32, w: u32) -> Next {
     if crate::custom_tracks::bonus_peak_selected()
         && es_global(c, es::FLOW).lw(c) < 2
     {
+        if !crate::custom_tracks::accept_menu_step(c) { return Ok(Exit::Zero); }
         if Addr(w.wrapping_add(0x18)).lw(c) != 0 {
             return es_deny(c, 0x0020_1d78);
         }
@@ -1874,6 +1887,7 @@ fn es_accept_event(c: &mut Cpu, this: u32, w: u32) -> Next {
     if crate::custom_tracks::bonus_peak_selected()
         && es_global(c, es::FLOW).lw(c) < 2
     {
+        if !crate::custom_tracks::accept_menu_step(c) { return Ok(Exit::Zero); }
         if Addr(w.wrapping_add(0x18)).lw(c) != 0 {
             return es_deny(c, 0x0020_1d78);
         }

@@ -152,7 +152,7 @@ def append_location(sdb: bytes, ssb: bytes, *, name: str,
     out_ssb = bytearray(ssb)
     descriptors = []
     for stream_id, raw in ((leaf_id, leaf_resources), (shared_id, shared_resources)):
-        out_ssb.extend(b"\0" * (_align(len(out_ssb), 256) - len(out_ssb)))
+        out_ssb.extend(b"\0" * (_align(len(out_ssb), 32 * 1024) - len(out_ssb)))
         descriptors.append(_hull_descriptor(raw, stream_id, len(out_ssb)))
         out_ssb.extend(encode_stream(raw))
     out_sdb = bytearray(sdb[:80])

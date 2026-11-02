@@ -61,6 +61,13 @@ pub mod custom_quit_load_screen;
 pub mod custom_finish_script_queue;
 pub mod custom_race_cutscene_queue;
 pub mod custom_resource_alloc;
+pub mod custom_timer_dispatch;
+pub mod custom_timer_init;
+pub mod custom_timer_add;
+pub mod custom_ui_texture_bank;
+pub mod custom_model_relocate;
+pub mod custom_model_parts;
+pub mod custom_menu_panels;
 #[cfg(feature = "camera")]
 pub mod camera;
 /// Debug-only overrides behind environment switches.
@@ -174,6 +181,13 @@ pub fn overrides() -> Vec<(u32, GuestFn, &'static str)> {
     v.extend_from_slice(custom_finish_script_queue::OVERRIDES);
     v.extend_from_slice(custom_race_cutscene_queue::OVERRIDES);
     v.extend_from_slice(custom_resource_alloc::OVERRIDES);
+    v.extend_from_slice(custom_timer_dispatch::OVERRIDES);
+    v.extend_from_slice(custom_timer_init::OVERRIDES);
+    v.extend_from_slice(custom_timer_add::OVERRIDES);
+    v.extend_from_slice(custom_ui_texture_bank::OVERRIDES);
+    v.extend_from_slice(custom_model_relocate::OVERRIDES);
+    v.extend_from_slice(custom_model_parts::OVERRIDES);
+    v.extend_from_slice(custom_menu_panels::OVERRIDES);
     v.extend_from_slice(movie::overrides());
     #[cfg(feature = "math")]
     v.extend_from_slice(math::OVERRIDES);
