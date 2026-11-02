@@ -75,6 +75,24 @@ describes 49 named locations, 183 spatial chunks and 159 streaming chunks;
 substituted for those SDB/SSB structures. A standalone Garibaldi world needs
 its own section graph and the resources the game expects in each section.
 
+The read-only target probe can inspect a retail SSX 3 stream directly from
+the SSX 3 ISO:
+
+```powershell
+py tools/ssx3_world_probe.py --iso $env:SSX3_ISO --location ARA1 --stream -1
+```
+
+ARA1's final stream contains 6,875 resources, including 1,913 terrain patches
+of 432 bytes and 3,052 instances. Its SDB entry reports 4,734,956 unpacked
+bytes, although its compressed blocks actually expand to 5,155,109 bytes;
+resource framing verifies the latter. SSX 3 patch coefficients begin at
+offset `0x40`. Six `vec3` fields at `0x158` are a bounding minimum and maximum
+followed by four corner positions. The decoded coefficients match all four
+corners to within 0.000641 world units over those 1,913 patches. This corrects
+the corner interpretation in the external reference reader and confirms the
+polynomial basis on real target data. It does not establish that a converted
+Tricky patch is accepted by the game loader.
+
 ## Integration boundaries
 
 - `crates/ssx3-game/src/event_boot.rs` scans three peaks from the original
