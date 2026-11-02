@@ -61,6 +61,40 @@ def pack_resource(kind: int, track_id: int, resource_id: int, payload: bytes) ->
             bytes([track_id]) + resource_id.to_bytes(3, "little") + payload)
 
 
+def conservative_patch_bounds(source: dict, margin: float = 0.25) -> tuple[list[float], list[float]]:
+    """Enclose the full bicubic surface using its Bernstein control hull.
+
+    Tricky's cached bounds sometimes describe only the four endpoints. The
+    polynomial can extend slightly outside them; Bernstein controls give a
+    guaranteed enclosure on the unit patch, before float32 rounding.
+    """
+    if not math.isfinite(margin) or margin < 0:
+        raise ValueError("patch bound margin must be finite and nonnegative")
+    coefficients = source["coefficients"]
+    if len(coefficients) != 16 or any(len(vector) < 3 for vector in coefficients):
+        raise ValueError("patch needs 16 coefficient vectors")
+    weights = ((1.0, 0.0, 0.0, 0.0),
+               (1.0, 1.0 / 3.0, 0.0, 0.0),
+               (1.0, 2.0 / 3.0, 1.0 / 3.0, 0.0),
+               (1.0, 1.0, 1.0, 1.0))
+    hull = []
+    for i in range(4):
+        for j in range(4):
+            hull.append([
+                sum(weights[i][p] * weights[j][q] *
+                    coefficients[(3 - p) * 4 + (3 - q)][axis]
+                    for p in range(i + 1) for q in range(j + 1))
+                for axis in range(3)
+            ])
+    lo = [min(source["bounds_min"][axis], *(point[axis] for point in hull)) - margin
+          for axis in range(3)]
+    hi = [max(source["bounds_max"][axis], *(point[axis] for point in hull)) + margin
+          for axis in range(3)]
+    if not all(math.isfinite(value) for value in (*lo, *hi)):
+        raise ValueError("patch has non-finite bounds")
+    return lo, hi
+
+
 def pack_patch_geometry(source: dict, *, prefix: bytes, object_id: bytes,
                         u10: int, chunk_id: int, texture_rid: int,
                         lightmap_rid: int, tail: bytes,

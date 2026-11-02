@@ -3,7 +3,7 @@
 import struct
 import unittest
 
-from ssx3_world_build import (encode_refpack_literals, encode_stream,
+from ssx3_world_build import (conservative_patch_bounds, encode_refpack_literals, encode_stream,
                               pack_patch_geometry, pack_resource)
 from ssx3_world_probe import decode_stream
 from tricky_assets import decode_refpack
@@ -44,6 +44,20 @@ class WorldStreamBuildTests(unittest.TestCase):
         framed = pack_resource(1, 8, 123, patch)
         self.assertEqual(framed[:8], b"\x01\xb0\x01\x00\x08\x7b\x00\x00")
         self.assertEqual(framed[8:], patch)
+
+    def test_curved_patch_bounds_include_interior(self):
+        # x(u,v) = u - u²: all four corners are at x=0, but the
+        # interior reaches x=0.25. Its Bernstein hull reaches 1/3.
+        coeff = [[0.0, 0.0, 0.0, 1.0] for _ in range(16)]
+        coeff[2 * 4 + 3][0] = 1.0
+        coeff[1 * 4 + 3][0] = -1.0
+        lo, hi = conservative_patch_bounds({
+            "coefficients": coeff,
+            "bounds_min": [0.0, 0.0, 0.0],
+            "bounds_max": [0.0, 0.0, 0.0],
+        }, margin=0)
+        self.assertEqual(lo, [0.0, 0.0, 0.0])
+        self.assertAlmostEqual(hi[0], 1.0 / 3.0)
 
 
 if __name__ == "__main__":

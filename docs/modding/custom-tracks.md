@@ -111,8 +111,11 @@ byte for byte. All 3,885 Garibaldi patches also fit the target geometry layout
 without changing a coefficient value. The writer requires explicit patch
 metadata for material IDs, section IDs and unknown header/tail fields; it
 does not fabricate them or claim that these geometry payloads form a loadable
-world. The terrain bounds and conservative sphere can be derived from the
-Tricky source, but the runtime mapping still needs validation.
+world. Tricky's saved bounds omit a little surface curvature on some patches.
+The writer can transform the power-basis coefficients to a Bernstein control
+hull and expand the bounds, with a small rounding margin, before deriving a
+bounding sphere. No sampled point among the 3,885 Garibaldi patches fell
+outside those expanded bounds. The runtime mapping still needs validation.
 
 The route converter produces an SSX 3 type-14 `WorldAIP` body from Tricky's
 path records:
