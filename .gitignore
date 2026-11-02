@@ -53,3 +53,8 @@ tools/.reorg-units.json
 # Standalone builds (tools/bundle.py): they contain the game
 /dist/
 /target-*/
+
+# Local reference checkout and converted game assets.
+/.refs/
+/.cache/
+__pycache__/
