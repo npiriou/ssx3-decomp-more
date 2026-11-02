@@ -90,9 +90,10 @@ def pack_world_script(pbd: dict, models: list[dict], source: dict,
     for spline in splines:
         # Garibaldi's rails use Tricky metal style 13. Native SSX 3 retail
         # race rails use style 10 and active flags 3.
-        flags = 3 if spline["rail_flags"] & 1 else 0
-        native_surface = surface(spline["style"]).native_id
-        out.extend(struct.pack("<I", (native_surface << 16) | flags))
+        style = -1 if spline["style"] == 0xffffffff else spline["style"]
+        native_surface = surface(style).native_id
+        flags = 3 if spline["rail_flags"] & 1 and native_surface >= 0 else 0
+        out.extend(struct.pack("<I", ((native_surface & 0xffff) << 16) | flags))
     return bytes(out), {"native_object_properties": len(offsets),
                         "native_instance_assignments": len(instance_properties),
                         "native_rail_assignments": len(splines)}

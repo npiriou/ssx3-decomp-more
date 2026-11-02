@@ -20,6 +20,7 @@ pub struct CustomPeak {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum EventKind {
     Race,
+    Freestyle,
 }
 
 /// Source disc and archive needed for a course's world assets.
@@ -45,22 +46,11 @@ pub struct CustomTrack {
 }
 
 pub const PEAKS: &[CustomPeak] = &[CustomPeak {
-    id: "bonus",
-    name: "Bonus",
+    id: "tricky",
+    name: "Peak Tricky",
 }];
 
-pub const TRACKS: &[CustomTrack] = &[CustomTrack {
-    id: "garibaldi",
-    name: "Garibaldi",
-    peak_id: "bonus",
-    event: EventKind::Race,
-    source: TrackSource::TrickyPs2 {
-        archive: "DATA/MODELS/GARI.BIG",
-    },
-    world_location: "GARI",
-    template_event: "ARA1",
-    template_location: "ARA1",
-}];
+include!("tricky_catalog.rs");
 
 // Zero means that the game follows only the original event/section tables.
 // The stored index is one-based so later custom courses need no new flag.
@@ -79,30 +69,31 @@ static MENU_ACTION_FRAME: AtomicU32 = AtomicU32::new(u32::MAX);
 // row. Lease it while the custom event is active and restore it on return.
 // Its sky and shared transport assets remain native; its terrain connectors
 // are excluded so they cannot overlap Garibaldi or run Snow Jam scripts.
-static RESIDENCY_ROW: Mutex<Option<[u8; 40]>> = Mutex::new(None);
+static RESIDENCY_ROW: Mutex<Option<(u32, [u8; 40])>> = Mutex::new(None);
 const TEMPLATE_RESIDENCY: u32 = 0x0044_2488;
 
 /// Build a separate metadata record so loading screens and results can use
 /// the custom name without changing the retail TrackInfo array.
 pub fn prepare_track_info(c: &mut Cpu, back: u32) -> crate::call::Flow {
-    if active().is_none() || TRACK_INFO.load(Ordering::Acquire) != 0 {
-        return Ok(());
-    }
+    let Some(track) = active() else { return Ok(()); };
     use ssx3_ee_rt::cpu::{reg::*, sx};
-    const TEMPLATE: u32 = 0x0043_d950;
-    c.g[A0][0] = 100;
-    c.g[A1][0] = sx(TEMPLATE + 4);
-    c.g[A2][0] = 0x100;
-    c.g[A3][0] = 0;
-    crate::call::call_ptr(c, 0x0031_7d70, back)?;
-    let pointer = c.g[V0][0] as u32;
+    let template = 0x0043_d950 + template_course_index(c, track) * 100;
+    let mut pointer = TRACK_INFO.load(Ordering::Acquire);
+    if pointer == 0 {
+        c.g[A0][0] = 100;
+        c.g[A1][0] = sx(template + 4);
+        c.g[A2][0] = 0x100;
+        c.g[A3][0] = 0;
+        crate::call::call_ptr(c, 0x0031_7d70, back)?;
+        pointer = c.g[V0][0] as u32;
+    }
     if pointer != 0 {
         for offset in 0..100 {
-            let value = c.bus.read8(TEMPLATE + offset);
+            let value = c.bus.read8(template + offset);
             c.bus.write8(pointer + offset, value);
         }
         // TrackInfo contains a display name, whereas UIText uses locale IDs.
-        let name = b"Garibaldi\0";
+        let name = track.name.as_bytes();
         for offset in 0..48 {
             c.bus.write8(
                 pointer + 4 + offset,
@@ -112,6 +103,29 @@ pub fn prepare_track_info(c: &mut Cpu, back: u32) -> crate::call::Flow {
         TRACK_INFO.store(pointer, Ordering::Release);
     }
     Ok(())
+}
+
+fn template_course_index(c: &mut Cpu, track: &CustomTrack) -> u32 {
+    (0..17).find(|index| {
+        let address = 0x0043_d950 + index * 100 + 0x34;
+        (0..4).all(|i| c.bus.read8(address + i) == track.template_event.as_bytes()[i as usize])
+    }).expect("native custom-event template is absent")
+}
+
+pub fn active_world_archive() -> Option<String> {
+    let track = active()?;
+    let mode = if track.event == EventKind::Race { "race" } else { "freestyle" };
+    Some(format!("DATA/WORLDS/TRICKY/{}-{mode}.BIG", track.world_location))
+}
+
+pub fn activate_code(value: &str) -> Option<&'static CustomTrack> {
+    let (code, mode) = value.split_once(':').unwrap_or((value, ""));
+    let track = TRACKS.iter().find(|track| {
+        (track.id.eq_ignore_ascii_case(code) || track.world_location.eq_ignore_ascii_case(code))
+            && (mode.is_empty() || (mode.eq_ignore_ascii_case("freestyle") && track.event == EventKind::Freestyle)
+                || (mode.eq_ignore_ascii_case("race") && track.event == EventKind::Race))
+    })?;
+    activate(track.id)
 }
 
 pub fn track_info() -> Option<u32> {
@@ -189,9 +203,9 @@ pub fn deactivate(c: &mut Cpu) {
             c.bus.write32(address, template);
         }
     }
-    if let Some(original) = RESIDENCY_ROW.lock().unwrap().take() {
+    if let Some((address, original)) = RESIDENCY_ROW.lock().unwrap().take() {
         for (offset, value) in original.into_iter().enumerate() {
-            c.bus.write8(TEMPLATE_RESIDENCY + offset as u32, value);
+            c.bus.write8(address + offset as u32, value);
         }
     }
     BONUS_SELECTED.store(false, Ordering::Release);
@@ -267,15 +281,16 @@ pub fn remap_section(c: &mut Cpu, section_man: u32) {
     }
     c.bus.write32(map + slots[0] * 16, custom);
     let mut residency = RESIDENCY_ROW.lock().unwrap();
+    let residency_address = TEMPLATE_RESIDENCY + template_course_index(c, track) * 40;
     if residency.is_none() {
         let mut original = [0; 40];
         for (offset, value) in original.iter_mut().enumerate() {
-            *value = c.bus.read8(TEMPLATE_RESIDENCY + offset as u32);
+            *value = c.bus.read8(residency_address + offset as u32);
         }
-        *residency = Some(original);
+        *residency = Some((residency_address, original));
     }
-    c.bus.write32(TEMPLATE_RESIDENCY + 4, 1);
-    c.bus.write32(TEMPLATE_RESIDENCY + 0x10, slots[0]);
+    c.bus.write32(residency_address + 4, 1);
+    c.bus.write32(residency_address + 0x10, slots[0]);
     LEASED_MAP_SLOT.store(slots[0], Ordering::Release);
     TEMPLATE_WORLD_SECTION.store(template, Ordering::Release);
     ACTIVE_WORLD_SECTION.store(custom, Ordering::Release);
@@ -313,11 +328,5 @@ mod tests {
             assert!(!TRACKS[index + 1..].iter().any(|later| later.id == track.id));
             assert_eq!(super::track(track.id), Some(track));
         }
-        assert_eq!(
-            tracks_on_peak("bonus")
-                .map(|track| track.id)
-                .collect::<Vec<_>>(),
-            vec!["garibaldi"]
-        );
     }
 }

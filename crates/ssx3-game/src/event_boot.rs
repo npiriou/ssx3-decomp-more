@@ -114,9 +114,7 @@ pub fn install() {
     };
     // Development boot for a catalog course: use a native SSX 3 race event
     // for its game mode, while the host section mapping selects its world.
-    if want.eq_ignore_ascii_case("GARI") || want.eq_ignore_ascii_case("garibaldi") {
-        let track = crate::custom_tracks::activate("garibaldi")
-            .expect("Garibaldi is absent from the custom-track catalog");
+    if let Some(track) = crate::custom_tracks::activate_code(&want) {
         want = track.template_event.to_string();
     }
     let rider = std::env::var("SSX3_RIDER").ok().map(|r| {

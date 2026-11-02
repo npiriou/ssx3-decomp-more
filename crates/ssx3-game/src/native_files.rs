@@ -216,7 +216,19 @@ pub fn install() -> bool {
 /// Read just the BIGF directory and SDB's shared-image counts. This happens
 /// before TexMan/FX initialization, while no world textures are resident.
 fn world_texture_slots(root: &std::path::Path) -> Option<u32> {
-    let mut file = File::open(root.join("DATA/WORLDS/BAM.BIG")).ok()?;
+    let mut slots = world_texture_slots_in_file(&root.join("DATA/WORLDS/BAM.BIG")).unwrap_or(1500);
+    if let Ok(entries) = std::fs::read_dir(root.join("DATA/WORLDS/TRICKY")) {
+        for entry in entries.flatten() {
+            if entry.path().extension().is_some_and(|ext| ext.eq_ignore_ascii_case("BIG")) {
+                slots = slots.max(world_texture_slots_in_file(&entry.path()).unwrap_or(1500));
+            }
+        }
+    }
+    Some(slots)
+}
+
+fn world_texture_slots_in_file(path: &std::path::Path) -> Option<u32> {
+    let mut file = File::open(path).ok()?;
     let mut fixed = [0u8; 16];
     file.read_exact(&mut fixed).ok()?;
     if &fixed[..4] != b"BIGF" {
@@ -293,7 +305,11 @@ impl State {
         match &mut self.src {
             Source::Iso(disc) => open_iso(disc, &mut self.found, name),
             Source::Overlay { disc, dir } => {
-                if let Some(path) = find_ci(dir, name) {
+                let custom = if name.eq_ignore_ascii_case("DATA/WORLDS/BAM.BIG") {
+                    crate::custom_tracks::active_world_archive()
+                } else { None };
+                let requested = custom.as_deref().unwrap_or(name);
+                if let Some(path) = find_ci(dir, requested) {
                     let f = File::open(&path).ok()?;
                     let size = u32::try_from(f.metadata().ok()?.len()).ok()?;
                     return Some(OpenFile {
@@ -302,10 +318,17 @@ impl State {
                         loc: Loc::Host(f),
                     });
                 }
+                if custom.is_some() {
+                    eprintln!("native files: custom course archive is missing: {requested}");
+                    return None;
+                }
                 open_iso(disc, &mut self.found, name)
             }
             Source::Dir(root) => {
-                let path = find_ci(root, name)?;
+                let custom = if name.eq_ignore_ascii_case("DATA/WORLDS/BAM.BIG") {
+                    crate::custom_tracks::active_world_archive()
+                } else { None };
+                let path = find_ci(root, custom.as_deref().unwrap_or(name))?;
                 let f = File::open(&path).ok()?;
                 let size = f.metadata().ok()?.len() as u32;
                 Some(OpenFile {

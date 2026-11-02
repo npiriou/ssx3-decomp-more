@@ -206,7 +206,7 @@ def parse_pbd(data: bytes, include_patches: bool) -> dict:
     offsets = dict(zip(OFFSETS, offset_values))
     start = offsets["patches"]
     count = counts["patches"]
-    if count > 100_000 or start < 4 + 4 * (len(COUNTS) + len(OFFSETS)):
+    if count > 100_000 or (count and start < 4 + 4 * (len(COUNTS) + len(OFFSETS))):
         raise FormatError("gari.pbd: invalid patch table")
     if start + count * PATCH_SIZE > len(data):
         raise FormatError("gari.pbd: truncated patch table")

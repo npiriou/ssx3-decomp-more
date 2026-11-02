@@ -102,6 +102,40 @@ def _hull_descriptor(raw: bytes, stream_id: int, file_offset: int) -> bytes:
     return bytes(out)
 
 
+def replace_single_stream_location(sdb: bytes, ssb: bytes, name: str,
+                                   resources: bytes) -> tuple[bytes, bytes]:
+    """Replace a sky's one stream without changing any section/hull IDs.
+
+    The new stream is appended, so every other location retains its bytes
+    and offsets. This lets each course carry its own Tricky sky through the
+    retail ASKY binding instead of growing fixed runtime section tables.
+    """
+    locations, chunks, streams = read_sdb(sdb)
+    location = next(item for item in locations if item["name"] == name)
+    if location["stream_count"] != 1:
+        raise FormatError("sky replacement expects a single-stream location")
+    records = _records(resources)
+    section = location["index"]
+    if any(track != (255 if kind in (9, 10) else section)
+           for kind, track, _, _ in records):
+        raise FormatError("sky replacement has a foreign section handle")
+    counts = Counter(kind for kind, _, _, _ in records)
+    result = bytearray(sdb)
+    for kind in range(28):
+        struct.pack_into("<h", result, 80 + section * 88 + 32 + kind * 2, counts[kind])
+    for kind in (9, 10):
+        highest = max((rid + 1 for k, _, rid, _ in records if k == kind), default=0)
+        struct.pack_into("<h", result, SHARED_ID_OFFSETS[kind],
+                         max(shared_next_id(sdb, kind), highest))
+    stream = location["first_stream"]
+    offset = _align(len(ssb), 32 * 1024)
+    stream_table = _align(80 + len(locations) * 88, 16) + len(chunks) * 96
+    result[stream_table + stream * 68:stream_table + (stream + 1) * 68] = \
+        _hull_descriptor(resources, stream, offset)
+    output = ssb + b"\0" * (offset - len(ssb)) + encode_stream(resources)
+    return bytes(result), output
+
+
 def append_location(sdb: bytes, ssb: bytes, *, name: str,
                     bounds_min: tuple[float, float, float],
                     bounds_max: tuple[float, float, float],
