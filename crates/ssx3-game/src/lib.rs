@@ -31,6 +31,9 @@ pub mod call;
 pub mod custom_tracks;
 pub mod bonus_menu_mode;
 pub mod custom_path_reader;
+pub mod custom_peak_widgets;
+pub mod custom_ui_objects;
+pub mod custom_ui_screen;
 #[cfg(feature = "camera")]
 pub mod camera;
 /// Debug-only overrides behind environment switches.
@@ -114,6 +117,9 @@ pub fn overrides() -> Vec<(u32, GuestFn, &'static str)> {
     v.extend(game::overrides());
     v.extend_from_slice(bonus_menu_mode::OVERRIDES);
     v.extend_from_slice(custom_path_reader::OVERRIDES);
+    v.extend_from_slice(custom_peak_widgets::OVERRIDES);
+    v.extend_from_slice(custom_ui_objects::OVERRIDES);
+    v.extend_from_slice(custom_ui_screen::OVERRIDES);
     v.extend_from_slice(movie::overrides());
     #[cfg(feature = "math")]
     v.extend_from_slice(math::OVERRIDES);

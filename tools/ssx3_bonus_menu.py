@@ -77,9 +77,9 @@ def add_peak_to_screen(screen: bytes) -> bytes:
         raise FormatError("Event Select peak list differs from the USA disc")
     struct.pack_into("<H", peak_list, 2, 56)
     struct.pack_into("<I", peak_list, 32, 5)
-    # Menu children are prepended by the UI loader: serialize Bonus first
-    # so the selectable order remains Peak1, Peak2, Peak3, Bonus.
-    peak_list[36:36] = struct.pack("<I", PEAK4)
+    # Preserve the three original menu indices; the original screen selects
+    # index 2 (Peak1) when it is created. Mountain is a separate heading.
+    peak_list[48:48] = struct.pack("<I", PEAK4)
 
     second_header = bytearray(screen[second:second + 16])
     second_count = struct.unpack_from("<H", second_header, 14)[0]

@@ -1894,6 +1894,9 @@
 0x0022cd40    SectionMan_Init
 0x002030a0    EventSelect_SetMode
 0x0026b310    PathData_ReadTrackPaths
+0x002009d0    EventSelect_OnWidgetCreated
+0x0039d078    UIScreen_CreateObject
+0x0039ced0    UIScreen_CreateObjects
 0x00230338    GameModule_InvalidateFocus
 0x00236ea0    GameStateResults_Exit
 0x00237cb0    GameRand_Seed

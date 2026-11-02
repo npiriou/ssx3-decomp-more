@@ -217,6 +217,12 @@ Generated disc assets remain ignored by Git.
   string indices; original locale entries are retained. The runtime accepts
   the Bonus widget by its name hash, bypasses career locks for custom rows,
   and switches these panels through the original UI object methods.
+  `UIScreen_CreateObject` links menu children with PushBack in file order;
+  the original `[Peak3, Peak2, Peak1]` indices are retained and Bonus is added
+  before the Mountain heading. `EventSelect_OnWidgetCreated` keeps its native
+  default selection at index 2 and gives the new widgets explicit callback IDs.
+  `UIScreen_CreateObjects` creates every definition, including the appended
+  custom menu roots, then notifies the state about each object.
 - `crates/ssx3-game/src/bonus_menu_mode.rs` ports EventSelect_SetMode and adds
   the custom-panel visibility pass. Original panel choices remain bounded to
   the original three peaks. New menu ordering, animation and navigation have

@@ -149,6 +149,11 @@ fn catalog_panel(c: &mut Cpu, this: u32, name: &[u8], visible: bool, back: u32) 
         c.g[A1][0] = visible as u64;
         call_ptr(c, target, back)?;
     }
+    if visible {
+        c.g[A0][0] = sx(object);
+        c.g[A1][0] = 0;
+        call_ptr(c, 0x0039_b960, back)?;
+    }
     Ok(())
 }
 
