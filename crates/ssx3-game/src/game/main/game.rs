@@ -56,6 +56,7 @@ pub const OVERRIDES: &[(u32, GuestFn, &str)] = &[
     ),
     (0x0022_cce8, section_man_ctor, "SectionMan_ctor"),
     (0x0022_cd18, section_man_dtor, "SectionMan_dtor"),
+    (0x0022_cd40, section_man_init, "SectionMan_Init"),
     (
         0x0022_d390,
         section_man_is_event_ready,
@@ -751,6 +752,174 @@ pub fn section_man_ctor(c: &mut Cpu) {
     })
 }
 
+/// `void SectionMan_Init(SectionMan* man)` (0x22cd40): clear the 50 logical
+/// section slots, map each named course section to its world section, and
+/// initialize the section request queue. The dispatcher labels are restart
+/// points for EE events delivered at loop back edges.
+pub fn section_man_init(c: &mut Cpu) {
+    guest(c, |c| {
+        let frame = Frame { size: 0x80 };
+        let mut pc = c.pc;
+        loop {
+            match pc {
+                0x0022_cd40 => {
+                    c.cycles += 20;
+                    let frame = Frame::open(c, 0x80);
+                    frame.save(c, S2, 0x50);
+                    frame.save(c, S5, 0x20);
+                    frame.save(c, S0, 0x70);
+                    frame.save(c, S1, 0x60);
+                    frame.save(c, S3, 0x40);
+                    frame.save(c, S4, 0x30);
+                    frame.save(c, S6, 0x10);
+                    frame.save_ra(c, 0);
+                    c.g[S2][0] = c.g[A0][0];
+                    call_ptr(c, 0x0014_dc80, 0x0022_cd6c)?;
+                    c.g[A0][0] = c.g[V0][0];
+                    c.g[A1][0] = 0;
+                    call_ptr(c, 0x0014_dd58, 0x0022_cd78)?;
+                    c.g[S5][0] = c.g[V0][0];
+                    c.g[A1][0] = 0x440000;
+                    c.g[V0][0] = sx(0x0044_2168);
+                    c.g[A0][0] = u64::MAX;
+                    c.g[V0][0] = sx(0x0044_2170);
+                    c.g[V1][0] = 0x31;
+                    pc = 0x0022_cd90;
+                }
+                0x0022_cd90 => {
+                    c.cycles += 7;
+                    c.sw(r32(c, V0).wrapping_sub(4), c.g[A0][0]);
+                    c.g[V1][0] = sx(r32(c, V1).wrapping_sub(1));
+                    c.sw(r32(c, V0), 0);
+                    let more = (c.g[V1][0] as i64) >= 0;
+                    c.g[V0][0] = sx(r32(c, V0).wrapping_add(0x10));
+                    if more {
+                        if back_edge_unwinds(c, 0x0022_cd90) {
+                            return Ok(());
+                        }
+                        pc = 0x0022_cd90;
+                    } else {
+                        pc = 0x0022_cdac;
+                    }
+                }
+                0x0022_cdac => {
+                    c.cycles += 5;
+                    c.g[V0][0] = sx(r32(c, A1).wrapping_add(0x2168));
+                    c.g[S3][0] = 0;
+                    c.sw(r32(c, V0).wrapping_add(0x314), 0);
+                    c.g[S6][0] = sx(r32(c, V0).wrapping_add(4));
+                    c.g[S1][0] = 0;
+                    pc = 0x0022_cdc0;
+                }
+                0x0022_cdc0 => {
+                    c.cycles += 2;
+                    c.g[S4][0] = sx(r32(c, S3).wrapping_add(1));
+                    pc = 0x0022_ce10;
+                }
+                0x0022_cdc8 => {
+                    c.cycles += 14;
+                    c.g[A1][0] = c.g[S3][0];
+                    call_ptr(c, 0x0014_4d38, 0x0022_cdd0)?;
+                    c.g[V1][0] = c.lw(r32(c, S2).wrapping_add(0x1b0));
+                    c.g[S0][0] = c.g[V0][0];
+                    c.g[A1][0] = c.g[S1][0];
+                    c.g[V0][0] = c.lw(r32(c, V1).wrapping_add(0x10));
+                    c.g[A0][0] = c.lw(r32(c, V0));
+                    c.g[A0][0] = sx(r32(c, A0).wrapping_add(0x10));
+                    call_ptr(c, 0x003a_9820, 0x0022_cdec)?;
+                    c.g[A0][0] = c.g[S0][0];
+                    c.g[A1][0] = c.g[V0][0];
+                    call_ptr(c, 0x0041_65a8, 0x0022_cdf8)?;
+                    if c.g[V0][0] == 0 {
+                        pc = 0x0022_ce00;
+                    } else {
+                        c.g[S1][0] = sx(r32(c, S1).wrapping_add(1));
+                        pc = 0x0022_ce10;
+                    }
+                }
+                0x0022_ce00 => {
+                    c.cycles += 4;
+                    c.g[V0][0] = sx(r32(c, S3) << 4);
+                    c.g[V0][0] = sx(r32(c, V0).wrapping_add(r32(c, S6)));
+                    c.sw(r32(c, V0), c.g[S1][0]);
+                    c.g[S1][0] = sx(r32(c, S1).wrapping_add(1));
+                    pc = 0x0022_ce10;
+                }
+                0x0022_ce10 => {
+                    c.cycles += 8;
+                    c.g[V0][0] = c.lw(r32(c, S2).wrapping_add(0x1b0));
+                    c.g[V1][0] = c.lw(r32(c, V0).wrapping_add(0x10));
+                    c.g[A0][0] = c.lw(r32(c, V1));
+                    c.g[A0][0] = sx(r32(c, A0).wrapping_add(0x10));
+                    call_ptr(c, 0x003a_9800, 0x0022_ce24)?;
+                    c.g[V0][0] = (c.g[S1][0] < c.g[V0][0]) as u64;
+                    if c.g[V0][0] != 0 {
+                        c.g[A0][0] = c.g[S5][0];
+                        if back_edge_unwinds(c, 0x0022_cdc8) {
+                            return Ok(());
+                        }
+                        pc = 0x0022_cdc8;
+                    } else {
+                        pc = 0x0022_ce30;
+                    }
+                }
+                0x0022_ce30 => {
+                    c.cycles += 4;
+                    c.g[S3][0] = c.g[S4][0];
+                    c.g[V0][0] = ((c.g[S3][0] as i64) < 50) as u64;
+                    c.g[S1][0] = 0;
+                    if c.g[V0][0] != 0 {
+                        if back_edge_unwinds(c, 0x0022_cdc0) {
+                            return Ok(());
+                        }
+                        pc = 0x0022_cdc0;
+                    } else {
+                        pc = 0x0022_ce40;
+                    }
+                }
+                0x0022_ce40 => {
+                    c.cycles += 26;
+                    let section_man = r32(c, S2);
+                    crate::custom_tracks::remap_section(c, section_man);
+                    c.g[V1][0] = 0x16;
+                    c.g[V0][0] = 1;
+                    c.sw(r32(c, S2).wrapping_add(0x1b8), 0);
+                    c.g[A0][0] = c.g[S2][0];
+                    c.sw(r32(c, S2).wrapping_add(0x1b4), 0);
+                    c.sw(r32(c, S2).wrapping_add(0x1c0), 0);
+                    c.sw(r32(c, S2).wrapping_add(0x1c8), 0);
+                    c.sw(r32(c, S2).wrapping_add(0x1cc), 0);
+                    c.sw(r32(c, S2).wrapping_add(0x1bc), c.g[V1][0]);
+                    c.sw(r32(c, S2).wrapping_add(0x1d0), c.g[V0][0]);
+                    Callee {
+                        addr: 0x0022_e228,
+                        f: ee::s05::f_0022e228,
+                    }
+                    .call(c, 0x0022_ce6c)?;
+                    c.g[V0][0] = u64::MAX;
+                    c.sw(r32(c, S2).wrapping_add(0x1c4), 0);
+                    c.sw(r32(c, S2).wrapping_add(0x1ac), c.g[V0][0]);
+                    c.sw(r32(c, S2).wrapping_add(0x1a4), 0);
+                    c.sw(r32(c, S2).wrapping_add(0x1a8), 0);
+                    for (reg, offset) in [
+                        (S0, 0x70), (S1, 0x60), (S2, 0x50), (S3, 0x40),
+                        (S4, 0x30), (S5, 0x20), (S6, 0x10),
+                    ] {
+                        frame.restore(c, reg, offset);
+                    }
+                    frame.restore_ra(c, 0);
+                    frame.close(c);
+                    return Ok(());
+                }
+                _ => {
+                    c.jump_out(pc, 0x0022_cd40, 0x0022_cea8);
+                    return Ok(());
+                }
+            }
+        }
+    })
+}
+
 // ---------------------------------------------------------------------------
 // Section manager.
 
@@ -773,6 +942,7 @@ pub fn section_man_get_event_world_section(c: &mut Cpu) {
     c.g[V0][0] = sx(r32(c, V0) << 4);
     c.g[A0][0] = sx(r32(c, A0).wrapping_add(r32(c, V0)));
     c.g[V0][0] = c.lw(p(r32(c, A0), 4));
+    c.g[V0][0] = sx(crate::custom_tracks::event_world_section(r32(c, V0)));
     abi::ret(c);
 }
 
@@ -1139,6 +1309,36 @@ pub(crate) mod tests {
                 globals(c);
                 c.g[A0][0] = sx(DATA);
                 c.g[A1][0] = sx(DATA + 0x3_0000 + (seed % 4) * 0x1000);
+            },
+        );
+    }
+
+    #[test]
+    fn section_man_init_matches() {
+        check(
+            ee::s05::f_0022cd40__generated,
+            section_man_init,
+            12,
+            &|c, seed| {
+                let _r = machine(c, seed, 0x22cd40, 0);
+                be_library(c);
+                c.pc = 0x0022_cd40;
+                let man = DATA + 0x1000;
+                let game = DATA + 0x2000;
+                let world = DATA + 0x3000;
+                let cache = DATA + 0x4000;
+                let sdb = DATA + 0x6000;
+                let sections = DATA + 0x8000;
+                c.g[A0][0] = sx(man);
+                c.bus.write32(man + 0x1b0, game);
+                c.bus.write32(game + 0x10, world);
+                c.bus.write32(world, cache);
+                c.bus.write32(cache + 0x14, sdb);
+                c.bus.write32(cache + 0x18, sections);
+                // Exercise no world section, an equal name, and a name miss.
+                c.bus.write32(sdb + 8, (seed % 3 != 0) as u32);
+                c.bus.write8(sections, if seed % 3 == 1 { 0 } else { b'X' });
+                c.bus.write8(sections + 1, 0);
             },
         );
     }

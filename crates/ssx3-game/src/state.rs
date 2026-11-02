@@ -173,6 +173,9 @@ pub fn be_new_race_int_get_track_info(c: &mut Cpu) {
     let off = abi::mult(c, index, TRACK_INFO_SIZE);
     c.g[V1][0] = sx(off);
     abi::set_ret(c, off.wrapping_add(TRACK_INFOS.0));
+    if let Some(info) = crate::custom_tracks::track_info() {
+        abi::set_ret(c, info);
+    }
     abi::ret(c);
 }
 

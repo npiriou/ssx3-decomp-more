@@ -15,6 +15,7 @@ from pathlib import Path
 import struct
 
 from ssx3_aip import convert_tricky_aip, inspect_world_aip
+from ssx3_splines import convert_splines, spline_template
 from ssx3_world_archive import append_location, pack_bigf, shared_next_id
 from ssx3_world_build import (conservative_patch_bounds, pack_patch_geometry,
                               pack_resource)
@@ -50,6 +51,10 @@ def build(SSX3_iso: Path, tricky_iso: Path, output: Path) -> dict:
     sdb = members["data/worlds/bam.sdb"]
     ssb = members["data/worlds/bam.ssb"]
     locations, _, streams = read_sdb(sdb)
+    template_location = next(location for location in locations
+                             if location["name"] == "ARA1")
+    template_stream = decode_stream(ssb, streams[template_location["last_stream"]])
+    world_splines = spline_template(template_stream)
     section_id = len(locations)
     leaf_id = len(streams)
     texture_base = shared_next_id(sdb, 9)
@@ -59,7 +64,8 @@ def build(SSX3_iso: Path, tricky_iso: Path, output: Path) -> dict:
     tricky_archive = read_iso_file(tricky_iso, "DATA/MODELS/GARI.BIG")
     pbd = parse_pbd(read_cofb_member(tricky_archive, "data/models/gari.pbd"), True)
     aip, starter_paths = convert_tricky_aip(
-        read_cofb_member(tricky_archive, "data/models/gari.aip"))
+        read_cofb_member(tricky_archive, "data/models/gari.aip"),
+        main_route=(0, 1, 2, 3, 4, 5))
     textures = parse_shps(read_cofb_member(tricky_archive, "data/models/gari.ssh"))
     lightmaps = parse_shps(read_cofb_member(tricky_archive, "data/models/gari_l.ssh"))
     texture_ids = {rid for rid, _ in textures}
@@ -115,6 +121,9 @@ def build(SSX3_iso: Path, tricky_iso: Path, output: Path) -> dict:
             tail=patch_tail,
         )
         shared.extend(pack_resource(1, section_id, rid, payload))
+    splines = convert_splines(pbd, world_splines, section_id)
+    for rid, payload in enumerate(splines):
+        shared.extend(pack_resource(8, section_id, rid, payload))
     shared.extend(pack_resource(14, section_id, 0, aip))
     # Retail race/showoff AIP companion resources are zero-length. They are
     # kept so the resource count and RID layout match a normal race section.
@@ -148,6 +157,7 @@ def build(SSX3_iso: Path, tricky_iso: Path, output: Path) -> dict:
         "shared_stream": leaf_id + 1, "world_bounds_min": world_min,
         "world_bounds_max": world_max, "texture_count": len(textures),
         "lightmap_count": len(lightmaps),
+        "spline_count": len(splines),
         "starter_ai_path_indices": starter_paths,
         "aip": inspect_world_aip(aip), **summary,
     }

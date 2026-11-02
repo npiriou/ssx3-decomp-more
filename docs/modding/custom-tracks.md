@@ -105,6 +105,14 @@ from its origin and `(direction × distance)` vectors agrees with the stored
 path bounds to at most 0.001574 world units. These paths are source geometry
 for adaptation to SSX 3; the Tricky AI is not executed.
 
+The PBD reader now also preserves the 169 spline headers and all 542 segment
+records: four control vectors, four curve coefficients, bounds, lengths,
+parent and neighbour links. On the real Garibaldi image every segment belongs
+to exactly one spline, and all previous/next links agree in both directions.
+SSX 3 type-8 spline resources have a 48-byte header and 144-byte segments,
+whereas Tricky has 40-byte headers and 128-byte segments. Their extra fields
+still need semantic mapping before the splines can be packaged as rails.
+
 SSX 3's `DATA/WORLDS/BAM.BIG` is a different BIGF archive. Its `bam.sdb`
 describes 49 named locations, 183 spatial chunks and 159 streaming chunks;
 `bam.ssb` holds compressed resource streams. The source LTG cells cannot be
@@ -162,53 +170,98 @@ py tools/ssx3_aip.py --iso $env:SSX_TRICKY_ISO --output .cache\gari.aip14
 
 Its structural parser accepts both retail SSX 3 ARA1 AIP (129 AI paths,
 eight race paths, six and 14 trailing records) and the converted Garibaldi
-AIP (90 AI paths, 14 race paths). The six Tricky starter path indices are
-reported separately. SSX 3's trailing tables appear to include start and
-course positions, but their gameplay meaning has not been established;
-the converter leaves them empty instead of guessing. This AIP body is a
-component of the derived world stream, not a race that can be launched yet.
+AIP (90 AI paths, 14 race paths). The generic CLI preserves the six Tricky
+starter indices separately and leaves the trailing tables empty. The Garibaldi
+world builder declares the main route as paths 0–5 and additionally creates
+six native start markers from the six starter AI paths, plus recovery anchors
+at the main route junctions and finish. Their final words link AIPath and
+TrackPath indices, rather than world sections.
+Garibaldi's 14 race paths include six sequential main-course paths: their
+remaining-distance fields decrease from about 460,747 to 53,700 world units,
+and each path's point distances nearly meet the next path's remaining-distance
+value. Paths 6–13 are alternate branches. The native `Path_ReadEvent` maps
+stored key 0 to runtime event 1 (finish) and stored key 18 to runtime event 11
+(checkpoint). Tricky's finish key 9 is unsupported by that table. The custom
+builder translates its first final-route finish event to key 0, and converts
+its key-11 time gates into native key-18 checkpoints with matching IDs across
+alternate routes. Other Tricky race commands are dropped. AI event keys are
+restricted to the keys supported by SSX 3's native table.
+
+## Prepare the local development assets
+
+```powershell
+python tools/prepare_bonus_tracks.py
+```
+
+Defaults use the SSX 3 ISO at the project root and the Tricky ISO one directory
+above it. `--ssx3-iso`, `--tricky-iso` and `--overlay` override these paths.
+The builder writes BAM.BIG, FE.LUI, CMNAMER.LOC and `custom-tracks.ready` under
+`.cache/overlay`. The native file layer discovers that folder automatically,
+so normal game startup needs no custom event command. The local SSX 3 ISO is
+a hard link to `X:\dev\ssx3\SSX 3 (USA).iso` in this development checkout.
+Generated disc assets remain ignored by Git.
 
 ## Integration boundaries
 
 - `crates/ssx3-game/src/custom_tracks.rs` is now a host-owned catalog with a
   `Bonus` peak and a `Garibaldi` race entry, using stable string IDs and a
-  Tricky archive source. It has lookup APIs for future menu integration. It
-  does **not** yet register that peak with the live Single Event screen or
-  start a race. Its IDs cannot index the original 17-entry course table.
+  Tricky archive source. Menu selection is a host flag while the native peak
+  index stays zero. Starting Garibaldi activates its catalog entry and uses
+  the normal ARA1 event/rules flow. Its IDs cannot index the original
+  17-entry course table.
 - `crates/ssx3-game/src/event_boot.rs` scans three peaks from the original
   event tables. This is a debug boot path, not the menu architecture.
-- `crates/ssx3-game/src/game/fe/uitemplatemap.rs` handles three original peak
-  rows, fixed row flags, tabs and event records. Its peak acceptance rejects
-  rows greater than two. The source UI templates also need inspection before
-  exposing a fourth row.
-- `crates/ssx3-game/src/state.rs` reads the original 17-entry track-info
-  table. An extra index must never run through that allocation.
+- `tools/ssx3_bonus_menu.py` adds the Bonus text widget to `SP_PeakList` and
+  creates separate one-item native menus `SPG_BonusGoals` (Race) and
+  `BonusRaceLocations` (Garibaldi). Locale additions have new hashes and
+  string indices; original locale entries are retained. The runtime accepts
+  the Bonus widget by its name hash, bypasses career locks for custom rows,
+  and switches these panels through the original UI object methods.
+- `crates/ssx3-game/src/bonus_menu_mode.rs` ports EventSelect_SetMode and adds
+  the custom-panel visibility pass. Original panel choices remain bounded to
+  the original three peaks. New menu ordering, animation and navigation have
+  not yet been observed in the running game.
+- `state.rs` and `beintnewrace.rs` can return a separate, heap-allocated
+  100-byte custom TrackInfo record. It supplies Garibaldi's locale name while
+  retaining the native template's resource code and bounded peak metadata.
+- `SectionMan_GetEventWorldSection` resolves an event through fixed guest
+  event and section tables. A diagnostic override of its ARA1 result (8) to
+  the appended world index (49) reached frame 300 but never read either new
+  SSB stream. The section manager's logical mapping and load requests also
+  need extension; changing this one return value is insufficient. The
+  diagnostic code was removed after the run. The current SectionMan_Init
+  port leases the template's existing logical map slot to GARI after the
+  retail name mapping, and original peak selection restores the leased slot.
+- The retail BAM has 49 world locations (indices 0–48). `SectionMan` has a
+  fixed 50-node pool whose last node (logical ID 49) is its queue sentinel.
+  The appended `GARI` world index 49 is valid in BAM, but assigning it as a
+  new logical section ID would collide with that sentinel. Custom course
+  selection therefore uses the separate mapping described above.
 - `crates/ssx3-game/src/native_files.rs` supports the SSX 3 ISO, a replacement
-  data directory, and the optional `SSX3_DATA_OVERLAY_DIR`. The overlay BAM
+  data directory, automatic local overlay, and `SSX3_DATA_OVERLAY_DIR`. The overlay BAM
   retains the original locations and adds `GARI` without replacing a course.
 - `crates/ssx3-render/src/world_casters.rs` reads loaded terrain patches from
   the Nash world tree. Rendering alone will not provide gameplay collision.
 
-The planned host catalog will keep custom peak and track IDs separate from
-the 17 original records. The event UI will query that catalog for Bonus,
-then the game world loader will select custom data from the Tricky image.
-World sections must carry patches, instances, material mappings, collisions,
-rails and race metadata. The standard SSX 3 race setup, AI, HUD and result
-states should consume the resulting world. Save data for the three original
-peaks must keep its current layout.
+The custom stream now contains 169 WorldSpline resources (542 segments),
+in addition to patches, materials, textures and AIP. Geometry, global segment
+links, lengths and the source's trailing flags are retained; the target-only
+prefix and tail fields come from a retail spline template. Those extra fields
+still need gameplay interpretation. No Tricky physics or gameplay scripts
+are executed.
 
 ## Work still required for a playable race
 
 1. Verify the provisional Tricky material/surface mapping, texture rendering,
    terrain orientation, scale and collision in a loaded `GARI` section.
-2. Convert instances, models, splines and spatial grouping into SSX 3-compatible
-   sections. Add start, checkpoints, finish, respawn and AI routes.
-3. Connect the host catalog to the game's world and race state without indexing
-   the original 17-entry track table.
-4. Extend Single Event's native UI with Bonus → Race → Garibaldi, including
-   controller and keyboard navigation, confirmation, restart and return.
-5. Verify Garibaldi end-to-end and replay the original three-peak menu and
-   races. Keep the browser smoke test last.
+2. Convert necessary models, instances, object collisions and spatial grouping.
+   Confirm the spline fields actually produce working native rails.
+3. Complete the surface mapping, ambiance/sky and course bounds.
+4. Finish the native menu integration, confirmation, restart, return and
+   custom result handling. The current added panels and world remapping are
+   implementation work, not evidence of a playable end-to-end race.
+5. Tests and replay gates are stopped at the user's explicit request. Do not
+   infer runtime correctness from successful asset construction or compilation.
 
 ## External format references
 

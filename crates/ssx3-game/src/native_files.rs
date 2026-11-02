@@ -150,9 +150,14 @@ pub fn install() -> bool {
                 .map(PathBuf::from)
                 .unwrap_or_else(|| repo_root().join("SSX 3 (USA).iso"));
             match Disc::open(&iso) {
-                Ok(d) => match std::env::var_os("SSX3_DATA_OVERLAY_DIR") {
+                Ok(d) => match std::env::var_os("SSX3_DATA_OVERLAY_DIR")
+                    .map(PathBuf::from)
+                    .or_else(|| {
+                        let dir = repo_root().join(".cache/overlay");
+                        dir.join("custom-tracks.ready").is_file().then_some(dir)
+                    })
+                {
                     Some(dir) => {
-                        let dir = PathBuf::from(dir);
                         if !dir.is_dir() {
                             eprintln!(
                                 "native files: SSX3_DATA_OVERLAY_DIR {} is not a directory; keeping the emulated CD",
@@ -174,6 +179,12 @@ pub fn install() -> bool {
             }
         }
     };
+    let custom_assets = match &src {
+        Source::Overlay { dir, .. } | Source::Dir(dir) =>
+            dir.join("custom-tracks.ready").is_file(),
+        Source::Iso(_) => false,
+    };
+    crate::custom_tracks::set_assets_available(custom_assets);
     *STATE.lock().unwrap() = Some(State {
         src,
         files: Vec::new(),

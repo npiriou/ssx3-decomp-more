@@ -272,6 +272,81 @@ def parse_pbd(data: bytes, include_patches: bool) -> dict:
             }
             for index in range(material_count)
         ]
+    spline_start = offsets["splines"]
+    segment_start = offsets["spline_segments"]
+    spline_count = counts["splines"]
+    segment_count = counts["spline_segments"]
+    if (spline_start + spline_count * 40 > len(data) or
+            segment_start + segment_count * 128 > len(data)):
+        raise FormatError("Tricky PBD spline table is truncated")
+    splines = []
+    spline_ranges = []
+    for index in range(spline_count):
+        off = spline_start + index * 40
+        bounds = struct.unpack_from("<6f", data, off)
+        flags, count_segments, first_segment, next_spline = struct.unpack_from(
+            "<4I", data, off + 24)
+        if (not all(math.isfinite(v) for v in bounds) or
+                any(bounds[axis] > bounds[axis + 3] for axis in range(3)) or
+                first_segment + count_segments > segment_count):
+            raise FormatError(f"Tricky PBD spline {index} has invalid bounds or segment range")
+        spline_ranges.append((first_segment, count_segments))
+        if include_patches:
+            splines.append({
+                "index": index, "bounds_min": list(bounds[:3]),
+                "bounds_max": list(bounds[3:]), "flags": flags,
+                "first_segment": first_segment, "segment_count": count_segments,
+                "next_spline": next_spline,
+            })
+    segments = []
+    segment_links = []
+    for index in range(segment_count):
+        off = segment_start + index * 128
+        geometry = struct.unpack_from("<20f", data, off)
+        previous, following, parent = struct.unpack_from("<3I", data, off + 80)
+        bounds = struct.unpack_from("<6f", data, off + 92)
+        length, previous_length = struct.unpack_from("<2f", data, off + 116)
+        flags = struct.unpack_from("<I", data, off + 124)[0]
+        if (not all(math.isfinite(v) for v in (*geometry, *bounds, length,
+                                              previous_length)) or
+                any(bounds[axis] > bounds[axis + 3] for axis in range(3)) or
+                parent >= spline_count or
+                previous != 0xffffffff and previous >= segment_count or
+                following != 0xffffffff and following >= segment_count):
+            raise FormatError(f"Tricky PBD spline segment {index} is invalid")
+        segment_links.append((previous, following, parent))
+        if include_patches:
+            segments.append({
+                "index": index,
+                "coefficients": list(geometry[16:]),
+                "control_points": [list(geometry[4 * i:4 * i + 4])
+                                   for i in range(4)],
+                "previous": previous, "next": following, "parent": parent,
+                "bounds_min": list(bounds[:3]),
+                "bounds_max": list(bounds[3:]),
+                "length": length, "previous_length": previous_length,
+                "flags": flags,
+            })
+    assigned = bytearray(segment_count)
+    for spline, (first, count_segments) in enumerate(spline_ranges):
+        for index in range(first, first + count_segments):
+            if assigned[index] or segment_links[index][2] != spline:
+                raise FormatError("Tricky PBD spline ranges overlap or disagree with segment parents")
+            assigned[index] = 1
+    if any(not value for value in assigned):
+        raise FormatError("Tricky PBD contains an unassigned spline segment")
+    for index, (previous, following, parent) in enumerate(segment_links):
+        if (previous != 0xffffffff and
+                (segment_links[previous][1] != index or
+                 segment_links[previous][2] != parent)):
+            raise FormatError(f"Tricky spline segment {index} has a broken previous link")
+        if (following != 0xffffffff and
+                (segment_links[following][0] != index or
+                 segment_links[following][2] != parent)):
+            raise FormatError(f"Tricky spline segment {index} has a broken next link")
+    if include_patches:
+        result["splines"] = splines
+        result["spline_segments"] = segments
     if include_patches:
         patches = []
         surface_counts: Counter[int] = Counter()

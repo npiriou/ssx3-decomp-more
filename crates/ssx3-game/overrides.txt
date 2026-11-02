@@ -1891,6 +1891,9 @@
 0x001f49d0    cFEStateBuyAttrib_TransitionIn
 0x001f55c0    cFEStateCareerStats_TransitionIn
 0x0022cd18    SectionMan_dtor
+0x0022cd40    SectionMan_Init
+0x002030a0    EventSelect_SetMode
+0x0026b310    PathData_ReadTrackPaths
 0x00230338    GameModule_InvalidateFocus
 0x00236ea0    GameStateResults_Exit
 0x00237cb0    GameRand_Seed

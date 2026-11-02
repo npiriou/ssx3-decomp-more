@@ -1234,7 +1234,11 @@ fn es_show_mode(c: &mut Cpu) -> Next {
     c.g[A0][0] = c.g[S2][0];
     action::UPDATE_MODE_PANELS.call(c, 0x0020_23c4)?;
     c.g[A0][0] = c.g[S2][0];
-    action::LOAD_MAP_IMAGE.call(c, 0x0020_23cc)?;
+    if crate::custom_tracks::bonus_peak_selected() {
+        action::HIDE_MAP_PIC.call(c, 0x0020_23cc)?;
+    } else {
+        action::LOAD_MAP_IMAGE.call(c, 0x0020_23cc)?;
+    }
     c.g[V0][0] = 0;
     Ok(Exit::Value)
 }
@@ -1327,9 +1331,26 @@ fn es_event_row(c: &mut Cpu, this: u32, w: u32, scaled: usize, by: usize) {
 
 // ------------------------------------------------- 1, 2: row colours
 
+fn es_custom_row(c: &mut Cpu, w: u32) -> bool {
+    if !crate::custom_tracks::assets_available() || es_global(c, es::FLOW).lw(c) >= 2 {
+        return false;
+    }
+    let mode = es_global(c, es::MODE).lw(c);
+    (mode == 0 && c.bus.read32(w.wrapping_add(0x38)) == 0x0056_b7e4)
+        || (crate::custom_tracks::bonus_peak_selected() && (mode == 1 || mode == 2))
+}
+
 /// Action 1: colour the row as highlighted (with the confirm popup up, its
 /// yes/no buttons follow the row).
 fn es_highlight(c: &mut Cpu, this: u32, w: u32) -> Next {
+    if es_custom_row(c, w) {
+        c.g[A0][0] = sx(this);
+        c.g[A1][0] = sx(w);
+        c.g[A2][0] = 1;
+        action::SET_HIGHLIGHT_COLOR.call(c, 0x0020_2510)?;
+        c.g[V0][0] = 0;
+        return Ok(Exit::Value);
+    }
     c.cycles += 3;
     c.g[V0][0] = Addr(this.wrapping_add(0x2cc)).lw(c);
     c.g[A0][0] = c.g[S2][0];
@@ -1470,6 +1491,14 @@ fn es_grow_highlight(c: &mut Cpu, this: u32, w: u32) -> Next {
 
 /// Action 2: colour the row as unlocked.
 fn es_unlocked(c: &mut Cpu, this: u32, w: u32) -> Next {
+    if es_custom_row(c, w) {
+        c.g[A0][0] = sx(this);
+        c.g[A1][0] = sx(w);
+        c.g[A2][0] = 1;
+        action::SET_UNLOCKED_COLOR.call(c, 0x0020_268c)?;
+        c.g[V0][0] = 0;
+        return Ok(Exit::Value);
+    }
     c.cycles += 3;
     c.g[V0][0] = Addr(this.wrapping_add(0x2cc)).lw(c);
     c.g[A0][0] = c.g[S2][0];
@@ -1581,6 +1610,19 @@ fn es_accept_peak(c: &mut Cpu, this: u32, w: u32) -> Next {
     c.cycles += 4;
     c.g[V1][0] = Addr(w.wrapping_add(0x18)).lw(c);
     let row = c.g[V1][0];
+    if crate::custom_tracks::assets_available()
+        && c.bus.read32(w.wrapping_add(0x38)) == 0x0056_b7e4
+        && es_global(c, es::FLOW).lw(c) < 2 {
+        crate::custom_tracks::select_bonus_peak();
+        es_sound(c, 6, false, 0x0020_19b4)?;
+        // Native layout calls keep a bounded guest peak. The host category
+        // chooses its own one-item panels in EventSelect_SetMode.
+        c.g[V0][0] = 0;
+        return es_pick_peak(c);
+    }
+    if row < 3 {
+        crate::custom_tracks::deactivate(c);
+    }
     let small = (row as i64) < 3;
     c.g[V0][0] = sx((row as u32) << 2);
     if !small {
@@ -1795,6 +1837,19 @@ fn es_accept_confirm(c: &mut Cpu, this: u32, w: u32) -> Next {
 /// Accept on the tab panel: an unlocked tab (`self[4 + id]`) opens its
 /// event list, else the "denied" sound.
 fn es_accept_tab(c: &mut Cpu, this: u32, w: u32) -> Next {
+    if crate::custom_tracks::bonus_peak_selected()
+        && es_global(c, es::FLOW).lw(c) < 2
+    {
+        if Addr(w.wrapping_add(0x18)).lw(c) != 0 {
+            return es_deny(c, 0x0020_1d78);
+        }
+        es_sound(c, 6, false, 0x0020_1d44)?;
+        es_global(c, es::TAB).sw(c, 0);
+        c.g[A0][0] = sx(this);
+        c.g[A1][0] = 2;
+        action::SET_MODE.call(c, 0x0020_1d58)?;
+        return es_show_mode(c);
+    }
     c.cycles += 6;
     c.g[V0][0] = Addr(w.wrapping_add(0x18)).lw(c);
     c.g[V0][0] = sx((c.g[V0][0] as u32) << 2);
@@ -1816,6 +1871,19 @@ fn es_accept_tab(c: &mut Cpu, this: u32, w: u32) -> Next {
 
 /// Accept on the event panel.
 fn es_accept_event(c: &mut Cpu, this: u32, w: u32) -> Next {
+    if crate::custom_tracks::bonus_peak_selected()
+        && es_global(c, es::FLOW).lw(c) < 2
+    {
+        if Addr(w.wrapping_add(0x18)).lw(c) != 0 {
+            return es_deny(c, 0x0020_1d78);
+        }
+        crate::custom_tracks::activate("garibaldi");
+        crate::custom_tracks::prepare_track_info(c, 0x0020_1dcc)?;
+        es_global(c, es::PEAK).sw(c, 0);
+        es_global(c, es::TAB).sw(c, 0);
+        c.g[V0][0] = es_global(c, es::WORLD).lw(c);
+        return es_start_event(c, w);
+    }
     c.cycles += 4;
     c.g[V0][0] = es_global(c, es::FLOW).lw(c);
     let front_end = c.g[V0][0] < 2;

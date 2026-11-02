@@ -3,14 +3,15 @@
 Both games use the same 7-word AI and 4-word race-path headers, followed by
 direction/distance points and events. Tricky wraps the two sections in an
 offset table and stores starter path indices separately. SSX 3 uses one
-contiguous resource with additional trailing tables. The caller retains the
-starter indices as race metadata; no SSX 3 start table is guessed here.
+contiguous resource with additional trailing tables. A declared main route
+also supplies native start and recovery markers from the source paths.
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 from pathlib import Path
 import re
@@ -73,7 +74,127 @@ def inspect_world_aip(data: bytes) -> dict:
     }
 
 
-def convert_tricky_aip(data: bytes) -> tuple[bytes, list[int]]:
+def _path_geometry(data: bytes, pos: int, kind: str) -> dict:
+    fixed = 28 if kind == "ai" else 16
+    count = _u32(data, pos + fixed)
+    origin = struct.unpack_from("<3f", data, pos + fixed + 8)
+    vectors = [struct.unpack_from("<4f", data, pos + fixed + 44 + index * 16)
+               for index in range(count)]
+    points = [origin]
+    for vector in vectors:
+        points.append(tuple(points[-1][axis] + vector[axis] * vector[3]
+                            for axis in range(3)))
+    return {"origin": origin, "vectors": vectors, "points": points,
+            "remaining": struct.unpack_from("<f", data, pos + 12)[0]
+            if kind == "race" else None}
+
+
+def _sample_path(path: dict, distance: float) -> tuple[tuple, tuple]:
+    position = path["origin"]
+    for vector in path["vectors"]:
+        step = min(max(distance, 0), vector[3])
+        position = tuple(position[axis] + vector[axis] * step for axis in range(3))
+        distance -= step
+        if distance <= 0:
+            return position, vector
+    return position, path["vectors"][-1]
+
+
+def _events(record: bytes, kind: str) -> list[tuple]:
+    fixed = 28 if kind == "ai" else 16
+    points, events = struct.unpack_from("<2I", record, fixed)
+    start = fixed + 44 + 16 * points
+    return [struct.unpack_from("<IIff", record, start + index * 16)
+            for index in range(events)]
+
+
+def _native_path_records(ai: list[bytes], race: list[bytes],
+                         main_route: tuple[int, ...]) -> tuple[bytes, bytes]:
+    # SSX 3 maps stored event keys through Path_ReadEvent's native table.
+    # In particular key 0 finishes a race and key 18 marks a checkpoint.
+    # Tricky key 9 is its finish, and key 11 awards time at its gates.
+    checkpoints = []
+    for index in main_route:
+        remaining = struct.unpack_from("<f", race[index], 12)[0]
+        checkpoints.extend(remaining - start for key, _, start, _ in
+                           _events(race[index], "race") if key == 11)
+
+    def rebuild(record: bytes, kind: str, index: int) -> bytes:
+        fixed = 28 if kind == "ai" else 16
+        points = _u32(record, fixed)
+        body = bytearray(record[:fixed + 44 + 16 * points])
+        source = _events(record, kind)
+        if kind == "ai":
+            # These keys exist in SSX 3's native AI event table. Unsupported
+            # Tricky commands (notably 105) are omitted, not reinterpreted.
+            native = [event for event in source
+                      if event[0] in (100, 101, 102, 103, 110, 111, 112, 113, 300)]
+        else:
+            native = []
+            remaining = struct.unpack_from("<f", record, 12)[0]
+            for key, _, start, end in source:
+                if key == 11 and checkpoints:
+                    checkpoint = min(range(len(checkpoints)),
+                                     key=lambda item: abs(checkpoints[item] - (remaining - start)))
+                    native.append((18, checkpoint, start, end))
+            if index == main_route[-1]:
+                finishes = [start for key, _, start, _ in source if key == 9]
+                if not finishes:
+                    raise FormatError("the final Tricky route has no finish event")
+                finish = min(finishes)
+                native.append((0, 0, finish, finish))
+        struct.pack_into("<I", body, fixed + 4, len(native))
+        body.extend(b"".join(struct.pack("<IIff", *event) for event in native))
+        return bytes(body)
+
+    return (b"".join(rebuild(record, "ai", index) for index, record in enumerate(ai)),
+            b"".join(rebuild(record, "race", index) for index, record in enumerate(race)))
+
+
+def _direction(vector: tuple[float, ...]) -> tuple[float, ...]:
+    norm = math.sqrt(sum(value * value for value in vector[:3]))
+    if not math.isfinite(norm) or norm == 0:
+        raise FormatError("AIP marker has no source direction")
+    return tuple(value / norm for value in vector[:3])
+
+
+def _native_markers(ai: list[dict], race: list[dict], starts: list[int],
+                    main_route: tuple[int, ...]) -> bytes:
+    if not main_route or any(index >= len(race) or index < 0 for index in main_route):
+        raise FormatError("AIP main route contains a missing race path")
+    markers = []
+    for lane, path_index in enumerate(starts):
+        path = ai[path_index]
+        markers.append((lane, 0, *path["origin"],
+                        *_direction(path["vectors"][0]), path_index, main_route[0]))
+
+    def nearest_ai(position: tuple[float, ...]) -> int:
+        return min(range(len(ai)), key=lambda index: min(
+            sum((point[axis] - position[axis]) ** 2 for axis in range(3))
+            for point in ai[index]["points"]))
+
+    # Type 1 markers are recovery anchors. Their final two words link the
+    # native AIPath and TrackPath arrays; they are not world section IDs.
+    # Keep the source route's junctions rather than inventing checkpoint
+    # positions at arbitrary distances along the course.
+    for marker_id, path_index in enumerate(main_route, 1):
+        path = race[path_index]
+        position = path["origin"]
+        markers.append((marker_id, 1, *position,
+                        *_direction(path["vectors"][0]),
+                        nearest_ai(position), path_index))
+    final_index = main_route[-1]
+    final = race[final_index]
+    position, direction = _sample_path(final, final["remaining"])
+    markers.append((0, 1, *position, *_direction(direction),
+                    nearest_ai(position), final_index))
+    return (struct.pack("<I", len(starts)) + b"\0" * (8 * len(starts)) +
+            struct.pack("<I", len(markers)) +
+            b"".join(struct.pack("<II6fII", *marker) for marker in markers))
+
+
+def convert_tricky_aip(data: bytes, *,
+                       main_route: tuple[int, ...] | None = None) -> tuple[bytes, list[int]]:
     """Preserve Tricky's routes and return its separate starter path indices."""
     if len(data) < 48 or data[:4] != b"\x0a" * 4:
         raise FormatError("unsupported Tricky AIP header")
@@ -91,8 +212,14 @@ def convert_tricky_aip(data: bytes) -> tuple[bytes, list[int]]:
     if any(start >= ai_count for start in starts):
         raise FormatError("Tricky AIP starter path index is out of range")
     ai_end = ai_begin
+    ai_geometry = []
+    ai_records = []
     for _ in range(ai_count):
-        ai_end = _skip_path(data, ai_end, "ai")
+        end = _skip_path(data, ai_end, "ai")
+        if main_route is not None:
+            ai_geometry.append(_path_geometry(data, ai_end, "ai"))
+            ai_records.append(data[ai_end:end])
+        ai_end = end
     race_header = race_offset + 16
     if ai_end != race_header:
         raise FormatError("Tricky AIP AI records do not meet the race section")
@@ -101,13 +228,24 @@ def convert_tricky_aip(data: bytes) -> tuple[bytes, list[int]]:
         raise FormatError("Tricky AIP race path count is unreasonable")
     race_begin = race_header + 16
     race_end = race_begin
+    race_geometry = []
+    race_records = []
     for _ in range(race_count):
-        race_end = _skip_path(data, race_end, "race")
+        end = _skip_path(data, race_end, "race")
+        if main_route is not None:
+            race_geometry.append(_path_geometry(data, race_end, "race"))
+            race_records.append(data[race_end:end])
+        race_end = end
     if race_end != len(data):
         raise FormatError("Tricky AIP has unexpected trailing bytes")
-    target = (b"iiii" + struct.pack("<I", ai_count) + data[ai_begin:ai_end] +
-              struct.pack("<I", race_count) + data[race_begin:race_end] +
-              struct.pack("<2I", 0, 0))
+    markers = (struct.pack("<2I", 0, 0) if main_route is None else
+               _native_markers(ai_geometry, race_geometry, starts, main_route))
+    ai_body, race_body = ((data[ai_begin:ai_end], data[race_begin:race_end])
+                          if main_route is None else
+                          _native_path_records(ai_records, race_records, main_route))
+    target = (b"iiii" + struct.pack("<I", ai_count) + ai_body +
+              struct.pack("<I", race_count) + race_body +
+              markers)
     inspect_world_aip(target)
     return target, starts
 

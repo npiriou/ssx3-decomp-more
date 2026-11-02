@@ -401,6 +401,9 @@ pub fn be_new_race_int_get_track_name(c: &mut Cpu) {
     c.mult(0, V1, V1, A0);
     c.g[V0][0] = sx(TRACK_RECORDS.wrapping_sub(0x26ac));
     c.g[V0][0] = sx((c.g[V1][0] as u32).wrapping_add(c.g[V0][0] as u32));
+    if let Some(info) = crate::custom_tracks::track_info() {
+        c.g[V0][0] = sx(info + 4);
+    }
     abi::ret(c);
 }
 

@@ -29,6 +29,8 @@ pub mod audio;
 pub mod call;
 /// Stable host IDs for additional Single Event peaks and courses.
 pub mod custom_tracks;
+pub mod bonus_menu_mode;
+pub mod custom_path_reader;
 #[cfg(feature = "camera")]
 pub mod camera;
 /// Debug-only overrides behind environment switches.
@@ -110,6 +112,8 @@ const CORE: &[(u32, GuestFn, &str)] = &[(
 pub fn overrides() -> Vec<(u32, GuestFn, &'static str)> {
     let mut v: Vec<(u32, GuestFn, &'static str)> = CORE.to_vec();
     v.extend(game::overrides());
+    v.extend_from_slice(bonus_menu_mode::OVERRIDES);
+    v.extend_from_slice(custom_path_reader::OVERRIDES);
     v.extend_from_slice(movie::overrides());
     #[cfg(feature = "math")]
     v.extend_from_slice(math::OVERRIDES);

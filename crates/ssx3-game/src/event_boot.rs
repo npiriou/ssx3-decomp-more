@@ -109,9 +109,16 @@ pub fn pad_buttons() -> u16 {
 /// Install the boot hook when `SSX3_EVENT` is set. Call after
 /// [`crate::install`] (it wraps the hand-written boot load update).
 pub fn install() {
-    let Ok(want) = std::env::var("SSX3_EVENT") else {
+    let Ok(mut want) = std::env::var("SSX3_EVENT") else {
         return;
     };
+    // Development boot for a catalog course: use a native SSX 3 race event
+    // for its game mode, while the host section mapping selects its world.
+    if want.eq_ignore_ascii_case("GARI") || want.eq_ignore_ascii_case("garibaldi") {
+        let track = crate::custom_tracks::activate("garibaldi")
+            .expect("Garibaldi is absent from the custom-track catalog");
+        want = track.template_event.to_string();
+    }
     let rider = std::env::var("SSX3_RIDER").ok().map(|r| {
         let r = r.to_ascii_lowercase();
         RIDERS
@@ -292,6 +299,7 @@ fn interface(c: &mut Cpu, n: u32, back: u32) -> Result<u32, crate::call::Unwound
 
 fn start(c: &mut Cpu, ev: &Event, rider: Option<u32>, back: u32) -> Flow {
     let gp = c.g[GP][0] as u32;
+    crate::custom_tracks::prepare_track_info(c, back)?;
     // Main menu "Single Event" (cFEStateMainMenu_OnWidgetAction, widget 9).
     call(c, FE_SET_ONLINE_MODE, &[0], back)?;
     let race = interface(c, 0, back)?;
