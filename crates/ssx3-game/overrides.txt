@@ -5440,3 +5440,5 @@
 0x003abfc0    cPS2ChunkResolve_RelocateMeshDmaPart
 0x003adc48    cPS2ChunkResolve_v08
 0x00202ad8    EventSelect_UpdateModePanels
+0x003abf50    cPS2ChunkResolve_RelocateMeshDmaParts
+0x0037c8c0    PS2GraphicsMan_LoadTextureFromShape
