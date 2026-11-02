@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from pathlib import Path
 
 from build_garibaldi_world import build
@@ -14,9 +15,11 @@ from tricky_assets import read_iso_file
 def main() -> None:
     root = Path(__file__).resolve().parent.parent
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--ssx3-iso", type=Path, default=root / "SSX 3 (USA).iso")
+    parser.add_argument("--ssx3-iso", type=Path,
+                        default=Path(os.environ.get("SSX3_ISO", root / "SSX 3 (USA).iso")))
     parser.add_argument("--tricky-iso", type=Path,
-                        default=root.parent / "SSX Tricky (USA).iso")
+                        default=Path(os.environ.get("SSX_TRICKY_ISO",
+                                                    root.parent / "SSX Tricky (USA).iso")))
     parser.add_argument("--overlay", type=Path, default=root / ".cache/overlay")
     args = parser.parse_args()
     ready = args.overlay / "custom-tracks.ready"

@@ -34,6 +34,21 @@ pub mod custom_path_reader;
 pub mod custom_peak_widgets;
 pub mod custom_ui_objects;
 pub mod custom_ui_screen;
+pub mod custom_instance_dma;
+pub mod custom_collision_leaves;
+pub mod custom_collision_resolve;
+pub mod custom_world_resolve;
+pub mod custom_static_objects;
+pub mod custom_static_object_ctor;
+pub mod custom_surface_defaults;
+pub mod custom_attach_modifier;
+pub mod custom_sphere_reader;
+pub mod custom_worldscript;
+pub mod custom_results;
+pub mod custom_finish_dispatch;
+pub mod custom_placement;
+pub mod custom_nash_insert;
+pub mod custom_resident_check;
 #[cfg(feature = "camera")]
 pub mod camera;
 /// Debug-only overrides behind environment switches.
@@ -120,6 +135,21 @@ pub fn overrides() -> Vec<(u32, GuestFn, &'static str)> {
     v.extend_from_slice(custom_peak_widgets::OVERRIDES);
     v.extend_from_slice(custom_ui_objects::OVERRIDES);
     v.extend_from_slice(custom_ui_screen::OVERRIDES);
+    v.extend_from_slice(custom_instance_dma::OVERRIDES);
+    v.extend_from_slice(custom_collision_leaves::OVERRIDES);
+    v.extend_from_slice(custom_collision_resolve::OVERRIDES);
+    v.extend_from_slice(custom_world_resolve::OVERRIDES);
+    v.extend_from_slice(custom_static_objects::OVERRIDES);
+    v.extend_from_slice(custom_static_object_ctor::OVERRIDES);
+    v.extend_from_slice(custom_surface_defaults::OVERRIDES);
+    v.extend_from_slice(custom_attach_modifier::OVERRIDES);
+    v.extend_from_slice(custom_sphere_reader::OVERRIDES);
+    v.extend_from_slice(custom_worldscript::OVERRIDES);
+    v.extend_from_slice(custom_results::OVERRIDES);
+    v.extend_from_slice(custom_finish_dispatch::OVERRIDES);
+    v.extend_from_slice(custom_placement::OVERRIDES);
+    v.extend_from_slice(custom_nash_insert::OVERRIDES);
+    v.extend_from_slice(custom_resident_check::OVERRIDES);
     v.extend_from_slice(movie::overrides());
     #[cfg(feature = "math")]
     v.extend_from_slice(math::OVERRIDES);

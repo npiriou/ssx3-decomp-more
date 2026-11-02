@@ -1,8 +1,9 @@
-"""Build a Garibaldi terrain/texture/route section in an SSX 3 BAM archive.
+"""Build a Garibaldi world section in an SSX 3 BAM archive.
 
-This is an asset integration fixture, not a playable course yet: Tricky
-instances, object collisions, SSX 3 start/finish markers, scripts, and the
-menu/race transition are still absent. The generated BAM belongs in .cache/.
+The derived data includes terrain, static models, textures, splines and
+native race paths and native object/rail property tables. Surface conversion
+and the surrounding event flow remain in development. The generated BAM
+belongs in .cache/.
 """
 
 from __future__ import annotations
@@ -15,14 +16,20 @@ from pathlib import Path
 import struct
 
 from ssx3_aip import convert_tricky_aip, inspect_world_aip
+from ssx3_collision import pack_collision, pack_sphere_tree
+from ssx3_models import pack_instance, pack_model
 from ssx3_splines import convert_splines, spline_template
+from ssx3_surfaces import patch_surface
 from ssx3_world_archive import append_location, pack_bigf, shared_next_id
+from ssx3_worldscript import pack_world_script
 from ssx3_world_build import (conservative_patch_bounds, pack_patch_geometry,
                               pack_resource)
 from ssx3_world_probe import (bigf_members, decode_stream, read_sdb,
                               resource_summary)
-from tricky_assets import (FormatError, parse_pbd, read_cofb_member,
+from tricky_assets import (FormatError, parse_ltg, parse_pbd, read_cofb_member,
                            read_iso_file)
+from tricky_models import parse_prefabs
+from tricky_collision import parse_ssf
 from tricky_ssh import inspect_world_ssh, parse_shps, to_world_ssh
 
 
@@ -62,7 +69,14 @@ def build(SSX3_iso: Path, tricky_iso: Path, output: Path) -> dict:
     if section_id > 255 or leaf_id > 32767:
         raise FormatError("SSX 3 world has no custom section ID capacity")
     tricky_archive = read_iso_file(tricky_iso, "DATA/MODELS/GARI.BIG")
-    pbd = parse_pbd(read_cofb_member(tricky_archive, "data/models/gari.pbd"), True)
+    pbd_data = read_cofb_member(tricky_archive, "data/models/gari.pbd")
+    pbd = parse_pbd(pbd_data, True)
+    models = parse_prefabs(pbd_data, pbd["counts"], pbd["offsets"])
+    collision_data = parse_ssf(read_cofb_member(tricky_archive, "data/models/gari.ssf"))
+    spatial = parse_ltg(read_cofb_member(tricky_archive, "data/models/gari.ltg"),
+                        pbd["counts"], True)
+    race_instances = sorted({index for node in spatial["nodes"]
+                             for index in node["race_instances"]})
     aip, starter_paths = convert_tricky_aip(
         read_cofb_member(tricky_archive, "data/models/gari.aip"),
         main_route=(0, 1, 2, 3, 4, 5))
@@ -90,9 +104,40 @@ def build(SSX3_iso: Path, tricky_iso: Path, output: Path) -> dict:
             0, section_id, material["index"],
             _material_payload(material, texture_base + material["texture_id"]),
         ))
+    model_layouts = {}
+    for model in models:
+        payload, layout = pack_model(model, section_id)
+        shared.extend(pack_resource(2, section_id, model["index"], payload))
+        model_layouts[model["index"]] = layout
+    mesh_counts = {}
+    for collision in collision_data["collisions"]:
+        payload = pack_collision(collision)
+        mesh_counts[collision["index"]] = struct.unpack_from("<H", payload, 2)[0]
+        shared.extend(pack_resource(12, section_id, collision["index"], payload))
+    physics_base = len(collision_data["collisions"])
+    for physics in collision_data["physics"]:
+        shared.extend(pack_resource(12, section_id, physics_base + physics["index"],
+                                    pack_sphere_tree(physics)))
+    instance_bounds = []
+    source_to_instance = {}
+    collision_bindings = []
+    instance_flags = []
+    for rid, index in enumerate(race_instances):
+        instance = pbd["instances"][index]
+        payload = pack_instance(instance, model_layouts[instance["model_id"]],
+                                section_id, leaf_id, resource_id=rid)
+        shared.extend(pack_resource(3, section_id, rid, payload))
+        source_to_instance[index] = rid
+        instance_bounds.append((instance["bounds_min"], instance["bounds_max"]))
+        properties = collision_data["properties"][collision_data["instance_properties"][index]]
+        instance_flags.append(properties["flags"])
+        if properties["flags"] & 32:
+            collision_bindings.append({"instance": rid, "source_instance": index,
+                                       **properties})
     # Retail target patches have these two constant words and a constant
     # 12-byte tail. The remaining header flags are taken from Tricky where
-    # meanings are known. U3=9 and U10=2048 are currently retail defaults.
+    # meanings are known. The section byte at +0x155 must identify GARI,
+    # independently of the logical section slot leased by the event loader.
     patch_tail = struct.pack("<6h", -1, -1, -1, -1, 0x483c, 17)
     world_min = [math.inf] * 3
     world_max = [-math.inf] * 3
@@ -106,21 +151,26 @@ def build(SSX3_iso: Path, tricky_iso: Path, output: Path) -> dict:
             world_min[axis] = min(world_min[axis], bounds_min[axis])
             world_max[axis] = max(world_max[axis], bounds_max[axis])
         geometry = {**patch, "bounds_min": bounds_min, "bounds_max": bounds_max}
+        native_surface, terrain_flags = patch_surface(patch["surface_type"])
         prefix = struct.pack(
             "<2I4h", 0x4f7b36c0, 0x004045b7,
-            patch["surface_type"], 9, patch["resource_kind_tags"],
+            native_surface, terrain_flags, patch["resource_kind_tags"],
             0 if patch["visibility"] else 128,
         )
         rid = patch["index"]
         payload = pack_patch_geometry(
             geometry, prefix=prefix,
             object_id=bytes([section_id]) + rid.to_bytes(3, "little"),
-            u10=2048, chunk_id=leaf_id,
+            u10=section_id << 8, chunk_id=leaf_id,
             texture_rid=patch["texture_assignment"],
             lightmap_rid=lightmap_base + patch["lightmap_id"],
             tail=patch_tail,
         )
         shared.extend(pack_resource(1, section_id, rid, payload))
+    for low, high in instance_bounds:
+        for axis in range(3):
+            world_min[axis] = min(world_min[axis], low[axis])
+            world_max[axis] = max(world_max[axis], high[axis])
     splines = convert_splines(pbd, world_splines, section_id)
     for rid, payload in enumerate(splines):
         shared.extend(pack_resource(8, section_id, rid, payload))
@@ -129,6 +179,9 @@ def build(SSX3_iso: Path, tricky_iso: Path, output: Path) -> dict:
     # kept so the resource count and RID layout match a normal race section.
     shared.extend(pack_resource(14, section_id, 1, b""))
     shared.extend(pack_resource(14, section_id, 2, b""))
+    world_script, script_summary = pack_world_script(
+        pbd, models, collision_data, race_instances, section_id, sdb[4:8], mesh_counts)
+    shared.extend(pack_resource(16, section_id, 0, world_script))
     new_sdb, new_ssb = append_location(
         sdb, ssb, name="GARI", bounds_min=tuple(world_min),
         bounds_max=tuple(world_max), leaf_resources=bytes(leaf),
@@ -158,6 +211,14 @@ def build(SSX3_iso: Path, tricky_iso: Path, output: Path) -> dict:
         "world_bounds_max": world_max, "texture_count": len(textures),
         "lightmap_count": len(lightmaps),
         "spline_count": len(splines),
+        "model_count": len(models), "instance_count": len(race_instances),
+        "collision_count": physics_base + len(collision_data["physics"]),
+        "mesh_collision_count": physics_base,
+        "sphere_collision_count": len(collision_data["physics"]),
+        **script_summary,
+        "collision_bindings": collision_bindings,
+        "instance_flags": instance_flags,
+        "source_to_instance": source_to_instance,
         "starter_ai_path_indices": starter_paths,
         "aip": inspect_world_aip(aip), **summary,
     }

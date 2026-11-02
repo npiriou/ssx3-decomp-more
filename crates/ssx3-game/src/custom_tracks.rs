@@ -5,6 +5,7 @@
 //! string ID, then resolve its own world and race data.
 
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicUsize, Ordering};
+use std::sync::Mutex;
 
 use ssx3_ee_rt::Cpu;
 
@@ -70,6 +71,12 @@ static LEASED_MAP_SLOT: AtomicU32 = AtomicU32::new(u32::MAX);
 static BONUS_SELECTED: AtomicBool = AtomicBool::new(false);
 static ASSETS_AVAILABLE: AtomicBool = AtomicBool::new(false);
 static TRACK_INFO: AtomicU32 = AtomicU32::new(0);
+// The template's native loading code consumes one fixed 40-byte residency
+// row. Lease it while the custom event is active and restore it on return.
+// Its sky and shared transport assets remain native; its terrain connectors
+// are excluded so they cannot overlap Garibaldi or run Snow Jam scripts.
+static RESIDENCY_ROW: Mutex<Option<[u8; 40]>> = Mutex::new(None);
+const TEMPLATE_RESIDENCY: u32 = 0x0044_2488;
 
 /// Build a separate metadata record so loading screens and results can use
 /// the custom name without changing the retail TrackInfo array.
@@ -92,8 +99,10 @@ pub fn prepare_track_info(c: &mut Cpu, back: u32) -> crate::call::Flow {
         }
         let name = b"kT_CustomGaribaldiName\0";
         for offset in 0..48 {
-            c.bus.write8(pointer + 4 + offset,
-                         name.get(offset as usize).copied().unwrap_or(0));
+            c.bus.write8(
+                pointer + 4 + offset,
+                name.get(offset as usize).copied().unwrap_or(0),
+            );
         }
         TRACK_INFO.store(pointer, Ordering::Release);
     }
@@ -101,7 +110,9 @@ pub fn prepare_track_info(c: &mut Cpu, back: u32) -> crate::call::Flow {
 }
 
 pub fn track_info() -> Option<u32> {
-    if active().is_none() { return None }
+    if active().is_none() {
+        return None;
+    }
     let pointer = TRACK_INFO.load(Ordering::Acquire);
     (pointer != 0).then_some(pointer)
 }
@@ -138,6 +149,9 @@ pub fn tracks_on_peak(id: &str) -> impl Iterator<Item = &'static CustomTrack> + 
 /// Select a host course before entering the native SSX 3 race flow.
 pub fn activate(id: &str) -> Option<&'static CustomTrack> {
     let index = TRACKS.iter().position(|track| track.id == id)?;
+    if ACTIVE.load(Ordering::Acquire) == index + 1 {
+        return TRACKS.get(index);
+    }
     ACTIVE_WORLD_SECTION.store(u32::MAX, Ordering::Release);
     TEMPLATE_WORLD_SECTION.store(u32::MAX, Ordering::Release);
     ACTIVE.store(index + 1, Ordering::Release);
@@ -153,6 +167,11 @@ pub fn deactivate(c: &mut Cpu) {
         let address = 0x0044_216c + slot * 16;
         if c.bus.read32(address) == custom {
             c.bus.write32(address, template);
+        }
+    }
+    if let Some(original) = RESIDENCY_ROW.lock().unwrap().take() {
+        for (offset, value) in original.into_iter().enumerate() {
+            c.bus.write8(TEMPLATE_RESIDENCY + offset as u32, value);
         }
     }
     BONUS_SELECTED.store(false, Ordering::Release);
@@ -173,19 +192,28 @@ pub fn active() -> Option<&'static CustomTrack> {
 pub fn remap_section(c: &mut Cpu, section_man: u32) {
     let Some(track) = active() else { return };
     let game = c.bus.read32(section_man.wrapping_add(0x1b0));
-    if game == 0 { return }
+    if game == 0 {
+        return;
+    }
     let world = c.bus.read32(game.wrapping_add(0x10));
-    if world == 0 { return }
+    if world == 0 {
+        return;
+    }
     let cache = c.bus.read32(world);
-    if cache == 0 { return }
-    let sdb = c.bus.read32(cache);
+    if cache == 0 {
+        return;
+    }
+    let sdb = c.bus.read32(cache.wrapping_add(0x14));
     if sdb == 0 {
         eprintln!("custom track {}: world index has not loaded", track.id);
         return;
     }
     let count = c.bus.read32(sdb.wrapping_add(8));
     if count > 255 {
-        eprintln!("custom track {}: unsupported world section count {count}", track.id);
+        eprintln!(
+            "custom track {}: unsupported world section count {count}",
+            track.id
+        );
         return;
     }
     let find = |name: &str, c: &Cpu| -> Option<u32> {
@@ -194,11 +222,14 @@ pub fn remap_section(c: &mut Cpu, section_man: u32) {
             c.bus.read_cstr(name_at).eq_ignore_ascii_case(name)
         })
     };
-    let (Some(template), Some(custom)) =
-        (find(track.template_location, c), find(track.world_location, c))
-    else {
-        eprintln!("custom track {}: BAM lacks {} or {}", track.id,
-                  track.template_location, track.world_location);
+    let (Some(template), Some(custom)) = (
+        find(track.template_location, c),
+        find(track.world_location, c),
+    ) else {
+        eprintln!(
+            "custom track {}: BAM lacks {} or {}",
+            track.id, track.template_location, track.world_location
+        );
         return;
     };
     let map = 0x0044_216c_u32;
@@ -206,11 +237,25 @@ pub fn remap_section(c: &mut Cpu, section_man: u32) {
         .filter(|&slot| c.bus.read32(map + slot * 16) == template)
         .collect();
     if slots.len() != 1 {
-        eprintln!("custom track {}: expected one logical section for {}, found {}",
-                  track.id, track.template_location, slots.len());
+        eprintln!(
+            "custom track {}: expected one logical section for {}, found {}",
+            track.id,
+            track.template_location,
+            slots.len()
+        );
         return;
     }
     c.bus.write32(map + slots[0] * 16, custom);
+    let mut residency = RESIDENCY_ROW.lock().unwrap();
+    if residency.is_none() {
+        let mut original = [0; 40];
+        for (offset, value) in original.iter_mut().enumerate() {
+            *value = c.bus.read8(TEMPLATE_RESIDENCY + offset as u32);
+        }
+        *residency = Some(original);
+    }
+    c.bus.write32(TEMPLATE_RESIDENCY + 4, 1);
+    c.bus.write32(TEMPLATE_RESIDENCY + 0x10, slots[0]);
     LEASED_MAP_SLOT.store(slots[0], Ordering::Release);
     TEMPLATE_WORLD_SECTION.store(template, Ordering::Release);
     ACTIVE_WORLD_SECTION.store(custom, Ordering::Release);
@@ -219,16 +264,23 @@ pub fn remap_section(c: &mut Cpu, section_man: u32) {
 /// Redirect the template event's world-section lookup only while its custom
 /// section is active. Other events and all unmodified sessions use retail IDs.
 pub fn event_world_section(original: u32) -> u32 {
-    if active().is_none() { return original }
+    if active().is_none() {
+        return original;
+    }
     let custom = ACTIVE_WORLD_SECTION.load(Ordering::Acquire);
-    if custom == u32::MAX { return original }
+    if custom == u32::MAX {
+        return original;
+    }
     // The template's current world index is looked up from the SDB by
     // remap_section. The original event lookup identifies it by the same
     // location name in the retail table; the value is cached below.
     let template = TEMPLATE_WORLD_SECTION.load(Ordering::Acquire);
-    if original == template { custom } else { original }
+    if original == template {
+        custom
+    } else {
+        original
+    }
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -241,7 +293,11 @@ mod tests {
             assert!(!TRACKS[index + 1..].iter().any(|later| later.id == track.id));
             assert_eq!(super::track(track.id), Some(track));
         }
-        assert_eq!(tracks_on_peak("bonus").map(|track| track.id).collect::<Vec<_>>(),
-                   vec!["garibaldi"]);
+        assert_eq!(
+            tracks_on_peak("bonus")
+                .map(|track| track.id)
+                .collect::<Vec<_>>(),
+            vec!["garibaldi"]
+        );
     }
 }

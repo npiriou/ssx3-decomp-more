@@ -477,6 +477,8 @@ def parse_ltg(data: bytes, counts: dict, include_nodes: bool) -> dict:
                     "patches": patches,
                     "instances": instances,
                     "gem_split": gem_split,
+                    "race_instances": instances[:instance_count],
+                    "showoff_instances": instances[:gem_split],
                     "spline_segments": segments,
                     "lights": lights,
                     "crossing_lights": crossing_lights,

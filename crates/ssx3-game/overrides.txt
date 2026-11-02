@@ -1897,6 +1897,16 @@
 0x002009d0    EventSelect_OnWidgetCreated
 0x0039d078    UIScreen_CreateObject
 0x0039ced0    UIScreen_CreateObjects
+0x003ac508    cPS2ChunkResolve_PatchInstanceDmaChain
+0x0032c0f8    Collide_MeshLeafTriangles
+0x003aaa08    cPS2ChunkResolve_v19
+0x003aae68    cPS2ChunkResolve_Resolve
+0x002fc0d0    WorldObjFactory_Object
+0x00356db0    Object_ctor
+0x002c2f18    SurfPropCache_InitDefaults
+0x002fae38    WorldObjFactory_AttachModifier
+0x00327da8    cPS2ChunkResolve_ParseHeader
+0x003accd8    tWScriptCache_Relocate
 0x00230338    GameModule_InvalidateFocus
 0x00236ea0    GameStateResults_Exit
 0x00237cb0    GameRand_Seed
@@ -5401,3 +5411,9 @@
 0x00101b60    FocusMan_Update
 # The boot logos (EA, THX) can be skipped with X/Start, like the intro
 0x001a27a0    ssx_BootMoviesUpdate
+# Additional-course results retain the native snapshot without official records
+0x00154ab8    BEScoreInt_SubmitRaceResult
+0x00238358    GameModeMan_OnRiderFinished
+0x00154ee8    BEScoreInt_SubmitPlacement
+0x00328c20    SpatialHash_Insert
+0x0022d278    SectionMan_IsEventLoaded
