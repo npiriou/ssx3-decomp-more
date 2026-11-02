@@ -1,7 +1,7 @@
 """Repackage Tricky PS2 SSH images as SSX 3 world texture resources.
 
-Tricky SHPS can store linear texels and palettes; SSX 3 world textures use
-the PS2 PSMT8 address and CLUT permutations. Tricky SHPS
+Tricky SHPS can store linear texels and palettes; the target declares its
+TexMan pixel layout and uses the PS2 CLUT permutation. Tricky SHPS
 entries use 16-byte subheaders; SSX 3 world SSH entries use 128-byte headers
 for both the image and palette. No texture image is stored in this repository.
 """
@@ -11,22 +11,6 @@ from __future__ import annotations
 import struct
 
 from tricky_assets import FormatError
-
-
-def _psmt8_bytes(linear: bytes, width: int, height: int) -> bytes:
-    """Place linear texels at their PS2 PSMT8 byte addresses."""
-    if width % 16 or height % 16:
-        raise FormatError("world PSMT8 texture dimensions must be multiples of 16")
-    result = bytearray(len(linear))
-    for y in range(height):
-        # Within each sixteen-row tile the row bits are ordered 3,2,0.
-        row = (y & ~15) + 2 * ((y & 1) | ((y >> 1) & 6))
-        for x in range(width):
-            low = ((y >> 1) & 1) | ((x >> 2) & 2) | ((x & 3) << 2)
-            low |= (((x >> 2) ^ (y >> 1) ^ (y >> 2)) & 1) << 4
-            address = row * width + ((x & ~15) << 1) + low
-            result[address] = linear[y * width + x]
-    return bytes(result)
 
 
 def _psmt8_palette(linear: bytes) -> bytes:
@@ -80,6 +64,7 @@ def to_world_ssh(source: bytes, *, lightmap: bool) -> bytes:
         header[0] = 5
         struct.pack_into("<2H", header, 4, width, height)
         header[13] = 0x10  # Retail WorldSSH's 32-bit texture mode.
+        struct.pack_into("<I", header, 16, 128)
         return bytes(header) + source[16:size]
     if fmt != 2 or size != 16 + width * height:
         raise FormatError("expected an 8-bit indexed Tricky texture")
@@ -89,15 +74,18 @@ def to_world_ssh(source: bytes, *, lightmap: bool) -> bytes:
     header[0] = 2
     header[1:4] = (128 + width * height).to_bytes(3, "little")
     struct.pack_into("<2H", header, 4, width, height)
-    header[13] = 0x30  # Retail WorldSSH's indexed texture mode.
+    swizzled_pixels = bool(struct.unpack_from("<I", source, 12)[0] & 0x2000)
+    # 0x1000 selects the relative data offset at +0x10. 0x2000 selects
+    # TexMan's pre-swizzled format 10; clear it for native linear format 9.
+    header[13] = 0x30 if swizzled_pixels else 0x10
+    struct.pack_into("<I", header, 16, 128)
     palette = bytearray(128)
     palette[0] = 0x21
     struct.pack_into("<3H", palette, 4, 256, 1, 256)
     palette[13] = 0x30
+    struct.pack_into("<I", palette, 16, 128)
     pixels = source[16:size]
     colours = source[size + 16:size + 16 + 1024]
-    if not struct.unpack_from("<I", source, 12)[0] & 0x2000:
-        pixels = _psmt8_bytes(pixels, width, height)
     if not struct.unpack_from("<I", source, size + 12)[0] & 0x2000:
         colours = _psmt8_palette(colours)
     return bytes(header) + pixels + bytes(palette) + colours

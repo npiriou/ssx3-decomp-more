@@ -144,9 +144,12 @@ Terrain stores the global texture ID directly; its source material is
 dereferenced during conversion. MDR meshes retain their local material
 indices and resolve them through the native model material table.
 
-Tricky's linear 8-bit texels are converted to PS2 PSMT8 byte addresses, and
-linear palettes to the native CLUT index order. Source entries already
-marked as swizzled retain their bytes. Lightmaps remain 32-bit images.
+Tricky's linear 8-bit texels use native TexMan format 9; source entries
+already marked as pre-swizzled retain their bytes and use format 10.
+Linear palettes are converted to native CLUT index order. All 128-byte
+image/palette headers explicitly store their relative data offset at +0x10;
+the 0x1000 flag requires that offset rather than an implicit header size.
+Lightmaps remain linear 32-bit images with the same offset convention.
 
 The resulting texture leaf is 1,833,768 unpacked bytes and the shared world
 stream is 5,361,088 bytes. Native shared textures use the separate
