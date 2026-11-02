@@ -193,15 +193,20 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--iso", type=Path,
                         default=Path(os.environ.get("SSX3_ISO", "SSX 3 (USA).iso")))
+    parser.add_argument("--big", type=Path,
+                        help="inspect a standalone BAM.BIG file instead of the ISO member")
     parser.add_argument("--location", default="ARA1")
     parser.add_argument("--stream", type=int, default=-1,
                         help="stream index within the location (default: final stream)")
     args = parser.parse_args()
     try:
-        system = read_iso_file(args.iso, "SYSTEM.CNF")
-        if b"SLUS_207.72" not in system:
-            raise FormatError(f"{args.iso}: expected SSX 3 USA (SLUS_207.72)")
-        archive = read_iso_file(args.iso, "DATA/WORLDS/BAM.BIG")
+        if args.big:
+            archive = args.big.read_bytes()
+        else:
+            system = read_iso_file(args.iso, "SYSTEM.CNF")
+            if b"SLUS_207.72" not in system:
+                raise FormatError(f"{args.iso}: expected SSX 3 USA (SLUS_207.72)")
+            archive = read_iso_file(args.iso, "DATA/WORLDS/BAM.BIG")
         members = bigf_members(archive)
         sdb = members["data/worlds/bam.sdb"]
         ssb = members["data/worlds/bam.ssb"]

@@ -2,8 +2,9 @@
 
 This repository copy is the work area for a fourth Single Event peak, **Bonus**, with
 Garibaldi from SSX Tricky PS2. The race and menu integration are **not yet
-implemented**. The current tool inspects source terrain without altering any
-SSX 3 course or saving converted game data to Git.
+implemented**. The current importer builds a separate Garibaldi world location
+inside a derived BAM archive. The three original peaks and their world streams
+stay in place. Derived game data stays outside Git under `.cache/`.
 
 ## Local images and first import
 
@@ -43,7 +44,42 @@ cargo run --profile game -p ssx3
 ```
 
 There is **no Garibaldi launch command yet**. `SSX_TRICKY_ISO` is read by the
-import tool only. The game does not register a custom track or display Bonus.
+import tools only. The game does not register a custom track or display Bonus.
+
+## Build and inspect the derived world archive
+
+The current builder converts Garibaldi's 3,885 terrain patches, 125 materials,
+121 indexed textures, 16 lightmaps and 90 AI paths/14 race paths. It appends
+one `GARI` location with a texture leaf and a shared resource stream to a copy
+of SSX 3's `BAM.BIG`. It does not yet convert Tricky's models, instances,
+collisions, splines or race markers. Consequently this archive is a resource
+integration fixture, **not a playable course**.
+
+```powershell
+$env:SSX3_ISO = 'X:\dev\ssx3\SSX 3 (USA).iso'
+$env:SSX_TRICKY_ISO = 'X:\dev\SSX Tricky (USA).iso'
+py tools/build_garibaldi_world.py --output .cache\overlay\DATA\WORLDS\BAM.BIG
+py tools/ssx3_world_probe.py --big .cache\overlay\DATA\WORLDS\BAM.BIG --location GARI
+```
+
+The builder checks both disc serials and fails with an explicit error if
+either image is absent or incompatible. It verifies the decompressed new
+streams and confirms the original locations and stream bytes are unchanged.
+The new BAM can be supplied to the native file layer while all other files
+still come from the SSX 3 ISO:
+
+```powershell
+$env:SSX3_DATA_OVERLAY_DIR = '.cache\overlay'
+cargo run --profile game -p ssx3
+```
+
+With no overlay variable, the game reads the unmodified SSX 3 ISO. A headless
+600-frame Snow Jam (`SSX3_EVENT=ARA1`) smoke run with the overlay reached
+frame 600, reported no missing functions, and read the derived BAM header and
+SDB. A matching retail run made the same 610 file reads; only the BAM header
+and SDB contents differed among common read keys. Music selection also
+varied between runs. This verifies existing course access with the appended
+archive; it **does not** exercise loading `GARI` or prove gameplay compatibility.
 
 ## Findings from the two images
 
@@ -102,7 +138,7 @@ resource stream and the leaf resource mapping. The probe validates each
 stream's SDB counts against the SSB records and checks child indices within
 the selected location's tree.
 
-`tools/ssx3_world_build.py` now writes SSB resource headers, uncompressed
+`tools/ssx3_world_build.py` writes SSB resource headers, uncompressed
 RefPack literal blocks and the known 432-byte patch geometry layout. Its
 encoder was verified by decoding a rebuilt 5,155,109-byte ARA1 resource
 stream to the same SHA-256 as the original. Repacking each of ARA1's 1,913
@@ -130,7 +166,7 @@ AIP (90 AI paths, 14 race paths). The six Tricky starter path indices are
 reported separately. SSX 3's trailing tables appear to include start and
 course positions, but their gameplay meaning has not been established;
 the converter leaves them empty instead of guessing. This AIP body is a
-component for a future world stream, not a race that can be launched yet.
+component of the derived world stream, not a race that can be launched yet.
 
 ## Integration boundaries
 
@@ -147,9 +183,9 @@ component for a future world stream, not a race that can be launched yet.
   exposing a fourth row.
 - `crates/ssx3-game/src/state.rs` reads the original 17-entry track-info
   table. An extra index must never run through that allocation.
-- `crates/ssx3-game/src/native_files.rs` already supports the SSX 3 ISO or a
-  replacement data directory. A custom world needs its own file resolution
-  and cache; replacing an original world file would break existing courses.
+- `crates/ssx3-game/src/native_files.rs` supports the SSX 3 ISO, a replacement
+  data directory, and the optional `SSX3_DATA_OVERLAY_DIR`. The overlay BAM
+  retains the original locations and adds `GARI` without replacing a course.
 - `crates/ssx3-render/src/world_casters.rs` reads loaded terrain patches from
   the Nash world tree. Rendering alone will not provide gameplay collision.
 
@@ -163,12 +199,12 @@ peaks must keep its current layout.
 
 ## Work still required for a playable race
 
-1. Resolve Tricky surface/material IDs to SSX 3 surface properties and texture
-   assets, then prove terrain orientation, scale and collision on a small
-   section before converting the whole course.
-2. Convert instances, splines and spatial grouping into SSX 3-compatible
+1. Verify the provisional Tricky material/surface mapping, texture rendering,
+   terrain orientation, scale and collision in a loaded `GARI` section.
+2. Convert instances, models, splines and spatial grouping into SSX 3-compatible
    sections. Add start, checkpoints, finish, respawn and AI routes.
-3. Add a separate host catalog and world loading path for custom tracks.
+3. Connect the host catalog to the game's world and race state without indexing
+   the original 17-entry track table.
 4. Extend Single Event's native UI with Bonus → Race → Garibaldi, including
    controller and keyboard navigation, confirmation, restart and return.
 5. Verify Garibaldi end-to-end and replay the original three-peak menu and

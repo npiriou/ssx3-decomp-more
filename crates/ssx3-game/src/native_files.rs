@@ -22,6 +22,9 @@
 //! Files come from the disc image (`SSX3_ISO`, by ISO9660 name) or, with
 //! `SSX3_DATA_DIR`, from an extracted copy of the disc (any case), which makes
 //! files replaceable on the host.
+//! `SSX3_DATA_OVERLAY_DIR` supplies only selected replacement files, falling
+//! back to `SSX3_ISO` for every other path. This is the custom-track world
+//! archive path; the original disc contents remain the fallback.
 //!
 //! On by default; `SSX3_NATIVE_FILES=0` keeps the emulated CD. `SSX3_FILE_LOG=path`
 //! (either mode) logs every completed read as `name offset size fnv64`, so a
@@ -73,6 +76,7 @@ const ACTIVE_REQUEST: u32 = 0x0051_9ad4;
 enum Source {
     Iso(Disc),
     Dir(PathBuf),
+    Overlay { disc: Disc, dir: PathBuf },
 }
 
 struct OpenFile {
@@ -146,7 +150,20 @@ pub fn install() -> bool {
                 .map(PathBuf::from)
                 .unwrap_or_else(|| repo_root().join("SSX 3 (USA).iso"));
             match Disc::open(&iso) {
-                Ok(d) => Source::Iso(d),
+                Ok(d) => match std::env::var_os("SSX3_DATA_OVERLAY_DIR") {
+                    Some(dir) => {
+                        let dir = PathBuf::from(dir);
+                        if !dir.is_dir() {
+                            eprintln!(
+                                "native files: SSX3_DATA_OVERLAY_DIR {} is not a directory; keeping the emulated CD",
+                                dir.display()
+                            );
+                            return false;
+                        }
+                        Source::Overlay { disc: d, dir }
+                    }
+                    None => Source::Iso(d),
+                },
                 Err(e) => {
                     eprintln!(
                         "native files: cannot open {}: {e}; keeping the emulated CD",
@@ -220,18 +237,18 @@ fn cd_name(full: &str) -> String {
 impl State {
     fn open(&mut self, name: &str) -> Option<OpenFile> {
         match &mut self.src {
-            Source::Iso(disc) => {
-                let hit = *self.found.entry(name.to_string()).or_insert_with(|| {
-                    disc.find(name)
-                        .filter(|e| !e.dir)
-                        .map(|e| (e.sector, e.size))
-                });
-                let (sector, size) = hit?;
-                Some(OpenFile {
-                    name: name.to_string(),
-                    size,
-                    loc: Loc::Sector(sector),
-                })
+            Source::Iso(disc) => open_iso(disc, &mut self.found, name),
+            Source::Overlay { disc, dir } => {
+                if let Some(path) = find_ci(dir, name) {
+                    let f = File::open(&path).ok()?;
+                    let size = u32::try_from(f.metadata().ok()?.len()).ok()?;
+                    return Some(OpenFile {
+                        name: name.to_string(),
+                        size,
+                        loc: Loc::Host(f),
+                    });
+                }
+                open_iso(disc, &mut self.found, name)
             }
             Source::Dir(root) => {
                 let path = find_ci(root, name)?;
@@ -251,7 +268,7 @@ impl State {
             return false;
         };
         match (&mut f.loc, &mut self.src) {
-            (Loc::Sector(s), Source::Iso(disc)) => {
+            (Loc::Sector(s), Source::Iso(disc) | Source::Overlay { disc, .. }) => {
                 // Whole sectors around [off, off + len).
                 let first = off / 2048;
                 let skip = (off % 2048) as usize;
@@ -266,6 +283,24 @@ impl State {
             _ => false,
         }
     }
+}
+
+fn open_iso(
+    disc: &mut Disc,
+    found: &mut HashMap<String, Option<(u32, u32)>>,
+    name: &str,
+) -> Option<OpenFile> {
+    let hit = *found.entry(name.to_string()).or_insert_with(|| {
+        disc.find(name)
+            .filter(|e| !e.dir)
+            .map(|e| (e.sector, e.size))
+    });
+    let (sector, size) = hit?;
+    Some(OpenFile {
+        name: name.to_string(),
+        size,
+        loc: Loc::Sector(sector),
+    })
 }
 
 /// Case-insensitive path lookup under `root` (`DATA/FOO.BIG` matches
