@@ -77,11 +77,28 @@ def build(SSX3_iso: Path, tricky_iso: Path, output: Path) -> dict:
                         pbd["counts"], True)
     race_instances = sorted({index for node in spatial["nodes"]
                              for index in node["race_instances"]})
+    # Follow Race scenery dependencies before assigning native IDs. Compact
+    # local tables avoid sparse slots that native resource loops can visit.
+    source_models = {pbd["instances"][index]["model_id"] for index in race_instances}
+    source_materials = {patch["texture_assignment"] for patch in pbd["patches"]}
+    for index in source_models:
+        for part in models[index]["objects"]:
+            source_materials.update(mesh["material"] for mesh in part["meshes"])
+    model_ids = {source: rid for rid, source in enumerate(sorted(source_models))}
+    material_ids = {source: rid for rid, source in enumerate(sorted(source_materials))}
+    materials = [material for material in pbd["materials"]
+                 if material["index"] in source_materials]
+    if len(materials) != len(material_ids):
+        raise FormatError("Race geometry references a missing source material")
+    source_textures = {material["texture_id"] for material in materials}
+    source_lightmaps = {patch["lightmap_id"] for patch in pbd["patches"]}
     aip, starter_paths = convert_tricky_aip(
         read_cofb_member(tricky_archive, "data/models/gari.aip"),
         main_route=(0, 1, 2, 3, 4, 5))
-    textures = parse_shps(read_cofb_member(tricky_archive, "data/models/gari.ssh"))
-    lightmaps = parse_shps(read_cofb_member(tricky_archive, "data/models/gari_l.ssh"))
+    textures = [(rid, body) for rid, body in parse_shps(
+        read_cofb_member(tricky_archive, "data/models/gari.ssh")) if rid in source_textures]
+    lightmaps = [(rid, body) for rid, body in parse_shps(
+        read_cofb_member(tricky_archive, "data/models/gari_l.ssh")) if rid in source_lightmaps]
     texture_ids = {rid for rid, _ in textures}
     lightmap_ids = {rid for rid, _ in lightmaps}
     if max(texture_ids, default=-1) + texture_base > 32767:
@@ -96,18 +113,21 @@ def build(SSX3_iso: Path, tricky_iso: Path, output: Path) -> dict:
         inspect_world_ssh(body, lightmap=True)
         leaf.extend(pack_resource(10, 255, lightmap_base + rid, body))
     shared = bytearray()
-    material_ids = {material["index"] for material in pbd["materials"]}
-    for material in pbd["materials"]:
+    for material in materials:
         if material["texture_id"] not in texture_ids:
             raise FormatError("Garibaldi material references a missing SSH texture")
         shared.extend(pack_resource(
-            0, section_id, material["index"],
+            0, section_id, material_ids[material["index"]],
             _material_payload(material, texture_base + material["texture_id"]),
         ))
     model_layouts = {}
     for model in models:
-        payload, layout = pack_model(model, section_id)
-        shared.extend(pack_resource(2, section_id, model["index"], payload))
+        if model["index"] not in model_ids:
+            continue
+        rid = model_ids[model["index"]]
+        payload, layout = pack_model(model, section_id, resource_id=rid,
+                                     material_rids=material_ids)
+        shared.extend(pack_resource(2, section_id, rid, payload))
         model_layouts[model["index"]] = layout
     mesh_counts = {}
     for collision in collision_data["collisions"]:
@@ -125,7 +145,8 @@ def build(SSX3_iso: Path, tricky_iso: Path, output: Path) -> dict:
     for rid, index in enumerate(race_instances):
         instance = pbd["instances"][index]
         payload = pack_instance(instance, model_layouts[instance["model_id"]],
-                                section_id, leaf_id, resource_id=rid)
+                                section_id, leaf_id, resource_id=rid,
+                                model_resource_id=model_ids[instance["model_id"]])
         shared.extend(pack_resource(3, section_id, rid, payload))
         source_to_instance[index] = rid
         instance_bounds.append((instance["bounds_min"], instance["bounds_max"]))
@@ -162,7 +183,7 @@ def build(SSX3_iso: Path, tricky_iso: Path, output: Path) -> dict:
             geometry, prefix=prefix,
             object_id=bytes([section_id]) + rid.to_bytes(3, "little"),
             u10=section_id << 8, chunk_id=leaf_id,
-            texture_rid=patch["texture_assignment"],
+            texture_rid=material_ids[patch["texture_assignment"]],
             lightmap_rid=lightmap_base + patch["lightmap_id"],
             tail=patch_tail,
         )
@@ -211,7 +232,8 @@ def build(SSX3_iso: Path, tricky_iso: Path, output: Path) -> dict:
         "world_bounds_max": world_max, "texture_count": len(textures),
         "lightmap_count": len(lightmaps),
         "spline_count": len(splines),
-        "model_count": len(models), "instance_count": len(race_instances),
+        "model_count": len(model_ids), "material_count": len(material_ids),
+        "source_model_count": len(models), "instance_count": len(race_instances),
         "collision_count": physics_base + len(collision_data["physics"]),
         "mesh_collision_count": physics_base,
         "sphere_collision_count": len(collision_data["physics"]),
@@ -219,6 +241,8 @@ def build(SSX3_iso: Path, tricky_iso: Path, output: Path) -> dict:
         "collision_bindings": collision_bindings,
         "instance_flags": instance_flags,
         "source_to_instance": source_to_instance,
+        "source_to_model": model_ids,
+        "source_to_material": material_ids,
         "starter_ai_path_indices": starter_paths,
         "aip": inspect_world_aip(aip), **summary,
     }

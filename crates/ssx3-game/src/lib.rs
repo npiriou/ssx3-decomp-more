@@ -60,6 +60,7 @@ pub mod custom_results_enter;
 pub mod custom_quit_load_screen;
 pub mod custom_finish_script_queue;
 pub mod custom_race_cutscene_queue;
+pub mod custom_resource_alloc;
 #[cfg(feature = "camera")]
 pub mod camera;
 /// Debug-only overrides behind environment switches.
@@ -172,6 +173,7 @@ pub fn overrides() -> Vec<(u32, GuestFn, &'static str)> {
     v.extend_from_slice(custom_quit_load_screen::OVERRIDES);
     v.extend_from_slice(custom_finish_script_queue::OVERRIDES);
     v.extend_from_slice(custom_race_cutscene_queue::OVERRIDES);
+    v.extend_from_slice(custom_resource_alloc::OVERRIDES);
     v.extend_from_slice(movie::overrides());
     #[cfg(feature = "math")]
     v.extend_from_slice(math::OVERRIDES);

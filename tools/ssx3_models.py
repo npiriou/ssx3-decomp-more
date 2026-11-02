@@ -102,7 +102,8 @@ def _dma_reference(data: bytearray, at: int, offset: int, payload: bytes) -> Non
     struct.pack_into("<4I", data, at, 0x30000000 | (len(payload) // 16), offset, 0, 0)
 
 
-def pack_model(model: dict, section_id: int) -> tuple[bytes, list[dict]]:
+def pack_model(model: dict, section_id: int, *, resource_id: int | None = None,
+               material_rids: dict[int, int] | None = None) -> tuple[bytes, list[dict]]:
     """Return a type-2 payload and its group/batch layout for instances."""
     objects = model["objects"]
     materials = sorted({mesh["material"] for part in objects for mesh in part["meshes"]})
@@ -110,7 +111,8 @@ def pack_model(model: dict, section_id: int) -> tuple[bytes, list[dict]]:
     object_table = 44 + len(materials) * 4
     out = bytearray(object_table + len(objects) * 16)
     for index, material in enumerate(materials):
-        struct.pack_into("<I", out, 44 + index * 4, (material << 8) | section_id)
+        rid = material if material_rids is None else material_rids[material]
+        struct.pack_into("<I", out, 44 + index * 4, (rid << 8) | section_id)
     groups = []
     for index, part in enumerate(objects):
         geometry = 0
@@ -156,7 +158,8 @@ def pack_model(model: dict, section_id: int) -> tuple[bytes, list[dict]]:
         struct.pack_into("<4I", dma, chain, 0x60000000, 0, 0, 0)
         chain += 16
     out.extend(dma)
-    struct.pack_into("<5If3f2I", out, 0, (model["index"] << 8) | section_id,
+    rid = model["index"] if resource_id is None else resource_id
+    struct.pack_into("<5If3f2I", out, 0, (rid << 8) | section_id,
                      len(objects), object_table, 40, 0, 0.0,
                      *model["scale"], model_data, len(materials))
     return bytes(out), groups
@@ -187,7 +190,8 @@ def _colour_segment(batch: dict, instance: dict, first: bool) -> bytes:
 
 
 def pack_instance(instance: dict, groups: list[dict], section_id: int,
-                  leaf_id: int, *, resource_id: int | None = None) -> bytes:
+                  leaf_id: int, *, resource_id: int | None = None,
+                  model_resource_id: int | None = None) -> bytes:
     """Build a type-3 instance with native per-vertex lighting chains."""
     low = instance["bounds_min"]
     high = instance["bounds_max"]
@@ -195,11 +199,12 @@ def pack_instance(instance: dict, groups: list[dict], section_id: int,
     radius = math.sqrt(sum(((high[axis] - low[axis]) / 2) ** 2 for axis in range(3)))
     out = bytearray(160)
     rid = instance["index"] if resource_id is None else resource_id
+    model_rid = instance["model_id"] if model_resource_id is None else model_resource_id
     matrix = [value for row in instance["matrix"] for value in row]
     struct.pack_into("<16f4f6f", out, 16, *matrix, *center, radius, *low, *high)
     struct.pack_into("<I2BhIf2I2h3I", out, 120,
                      (rid << 8) | section_id, 0, section_id, leaf_id,
-                     (instance["model_id"] << 8) | section_id, 1.0, 0, 0,
+                     (model_rid << 8) | section_id, 1.0, 0, 0,
                      -1, 0, 0, 160, 0)
     chain_size = sum((2 * len(group["batches"]) + 1) * 16 for group in groups)
     dma = bytearray(chain_size)

@@ -104,9 +104,9 @@ The ordinary pause-menu Quit path reaches the same cleanup point.
 | Resource | Imported amount | Native representation |
 | --- | ---: | --- |
 | Terrain | 3,885 patches | Type 1 bicubic Bezier patches |
-| Materials | 125 | Type 0 WorldMaterial |
-| Textures / lightmaps | 121 / 16 | Shared type 9 / 10 resources |
-| Models | 648, with 740 hierarchical parts | Type 2 MDR meshes |
+| Materials | 117 | Type 0 WorldMaterial |
+| Textures / lightmaps | 53 / 16 | Shared type 9 / 10 resources |
+| Models | 627, with 699 hierarchical parts | Type 2 MDR meshes |
 | Race instances | 3,236 of 3,393 source instances | Type 3 instances |
 | Mesh collision resources | 412 | Type 12 triangle meshes |
 | Sphere-tree collision resources | 56 | Type 12 native sphere bodies |
@@ -124,6 +124,20 @@ converter preserves all 16 coefficient vectors and expands bounds using a
 Bernstein control hull. It does not triangulate the terrain. Instance bounds
 also contribute to the world bounds. Race/common LTG lists select scenery;
 Showoff-only instances are excluded.
+
+The builder follows Race instances to their models, material assignments and
+texture references before packaging. It imports 627 of the 648 source
+models, 117 of 125 materials and 53 of 121 textures. Local model/material IDs
+are compacted together; the generated manifest preserves source-to-native
+ID maps. Shared texture IDs retain their source offsets in the appended
+global range. No model or material reference points into a removed slot.
+
+The resulting texture leaf is 1,833,768 unpacked bytes and the shared world
+stream is 5,361,088 bytes. Native shared textures use the separate
+`BxStream SHAREDMEM` allocator. Terrain, models, instances and collision data
+use the section allocator; textures do not consume its fixed 128 KiB blocks.
+The single texture leaf is retained for this first course. Spatial subdivision
+can be added later using the native shared-resource reference counts.
 
 `tools/ssx3_models.py` constructs native MDR part tables and DMA/VIF mesh
 chains, retaining source hierarchy and scale. It builds per-instance lighting

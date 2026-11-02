@@ -5430,3 +5430,4 @@
 0x00230488    GameModule_QuitToLoadScreen
 0x0027a860    ScriptEngine_QueueFinishScripts
 0x0027ac60    ScriptEngine_QueueRaceCutscene
+0x003a8a90    cWorldCache_AllocResource
