@@ -38,7 +38,7 @@ def bigf_members(archive: bytes) -> dict[str, bytes]:
     return members
 
 
-def read_sdb(data: bytes) -> tuple[list[dict], list[dict]]:
+def read_sdb(data: bytes) -> tuple[list[dict], list[dict], list[dict]]:
     if len(data) < 80 or data[:4] != b"\x00\x38\x00\x01":
         raise FormatError("unsupported SSX 3 SDB version")
     location_count, chunk_count, stream_count = struct.unpack_from("<3I", data, 8)
@@ -66,6 +66,21 @@ def read_sdb(data: bytes) -> tuple[list[dict], list[dict]]:
             "last_stream": last_stream,
             "first_chunk": first_chunk,
         })
+    chunks = []
+    for index in range(chunk_count):
+        pos = chunk_offset + index * 96
+        low = struct.unpack_from("<4f", data, pos)
+        high = struct.unpack_from("<4f", data, pos + 16)
+        child1, child2, streaming_id, extra = struct.unpack_from("<4I", data, pos + 80)
+        chunks.append({
+            "index": index,
+            "bounds_min": list(low),
+            "bounds_max": list(high),
+            "child1": child1,
+            "child2": child2,
+            "streaming_chunk_id": streaming_id,
+            "extra": extra,
+        })
     streams = []
     for index in range(stream_count):
         pos = stream_offset + index * 68
@@ -82,7 +97,7 @@ def read_sdb(data: bytes) -> tuple[list[dict], list[dict]]:
             "unpacked_size": unpacked_size,
             "resource_counts_0_to_12": list(resource_counts),
         })
-    return locations, streams
+    return locations, chunks, streams
 
 
 def decode_stream(ssb: bytes, stream: dict) -> bytes:
@@ -190,7 +205,7 @@ def main() -> int:
         members = bigf_members(archive)
         sdb = members["data/worlds/bam.sdb"]
         ssb = members["data/worlds/bam.ssb"]
-        locations, streams = read_sdb(sdb)
+        locations, chunks, streams = read_sdb(sdb)
         location = next((entry for entry in locations
                          if entry["name"].casefold() == args.location.casefold()), None)
         if location is None:
@@ -201,12 +216,23 @@ def main() -> int:
         stream = streams[location["first_stream"] + index]
         unpacked = decode_stream(ssb, stream)
         summary = resource_summary(unpacked, stream["num_resources"])
+        for kind, count in enumerate(stream["resource_counts_0_to_12"]):
+            if summary["resource_counts"].get(kind, 0) != count:
+                raise FormatError(f"SDB/SSB resource count mismatch for kind {kind}")
+        location_chunks = chunks[location["first_chunk"]:
+                                 location["first_chunk"] + location["chunk_count"]]
+        chunk_ids = {chunk["index"] for chunk in location_chunks}
+        for chunk in location_chunks:
+            for child in (chunk["child1"], chunk["child2"]):
+                if child != 0xffffffff and child not in chunk_ids:
+                    raise FormatError(f"location {location['name']} points outside its chunk tree")
     except (OSError, FormatError, KeyError) as error:
         parser.exit(2, f"SSX 3 world probe: {error}\n")
     print(json.dumps({
         "world_locations": len(locations),
         "world_streams": len(streams),
         "location": location,
+        "location_chunks": location_chunks,
         "stream": stream,
         "actual_unpacked_size": len(unpacked),
         **summary,

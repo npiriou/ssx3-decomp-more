@@ -93,6 +93,15 @@ the corner interpretation in the external reference reader and confirms the
 polynomial basis on real target data. It does not establish that a converted
 Tricky patch is accepted by the game loader.
 
+ARA1 has a 15-node binary spatial tree: seven internal nodes and eight leaves.
+The leaves point to streams 25–32, containing only resource kinds 9 and 10
+(shapes and shape lightmaps). Stream 33 holds the location's terrain, models,
+instances, collisions and race metadata; its patches refer back to those
+eight leaf stream IDs. Thus the importer must preserve both the shared
+resource stream and the leaf resource mapping. The probe validates each
+stream's SDB counts against the SSB records and checks child indices within
+the selected location's tree.
+
 ## Integration boundaries
 
 - `crates/ssx3-game/src/event_boot.rs` scans three peaks from the original
