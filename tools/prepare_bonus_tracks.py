@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import struct
 from pathlib import Path
 
 from build_garibaldi_world import build
@@ -23,16 +24,19 @@ def main() -> None:
     parser.add_argument("--overlay", type=Path, default=root / ".cache/overlay")
     args = parser.parse_args()
     ready = args.overlay / "custom-tracks.ready"
-    ready.unlink(missing_ok=True)
-    world = build(args.ssx3_iso, args.tricky_iso,
-                  args.overlay / "DATA/WORLDS/BAM.BIG")
-    for path, convert in (("DATA/UI/FE.LUI", add_bonus_screen),
-                          ("DATA/LOCALE/CMNAMER.LOC", add_bonus_locale)):
-        target = args.overlay / path
-        target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_bytes(convert(read_iso_file(args.ssx3_iso, path)))
-    ready.write_text(json.dumps({"version": 1, "tracks": ["garibaldi"],
-                                 "world": world}, indent=2), encoding="utf-8")
+    try:
+        ready.unlink(missing_ok=True)
+        world = build(args.ssx3_iso, args.tricky_iso,
+                      args.overlay / "DATA/WORLDS/BAM.BIG")
+        for path, convert in (("DATA/UI/FE.LUI", add_bonus_screen),
+                              ("DATA/LOCALE/CMNAMER.LOC", add_bonus_locale)):
+            target = args.overlay / path
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(convert(read_iso_file(args.ssx3_iso, path)))
+        ready.write_text(json.dumps({"version": 1, "tracks": ["garibaldi"],
+                                     "world": world}, indent=2), encoding="utf-8")
+    except (OSError, ValueError, OverflowError, struct.error) as error:
+        parser.exit(2, f"Bonus asset preparation: {error}\n")
     print(f"Bonus assets: {args.overlay}")
     print(f"Garibaldi: {world['resource_counts']}")
 
