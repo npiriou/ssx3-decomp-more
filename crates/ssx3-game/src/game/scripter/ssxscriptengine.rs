@@ -7318,6 +7318,14 @@ pub fn script_engine_queue_finish_scripts(c: &mut Cpu) {
 /// by a negative kind); states 1 and 2 queue choice 5, state 3 queues 4 and
 /// then 5, and anything else does nothing.
 pub fn script_engine_queue_intro_scripts(c: &mut Cpu) {
+    if crate::custom_tracks::active().is_some() {
+        // The native template provides race rules, but its fly-over,
+        // approach and gate cameras are authored for another world. An
+        // additional course with no native presentation list continues
+        // through the ordinary rider-loading and countdown path instead.
+        abi::ret(c);
+        return;
+    }
     let frame = Frame::open(c, 0x20);
     'b_27ac58: {
         'b_27ac54: {

@@ -49,6 +49,11 @@ pub mod custom_finish_dispatch;
 pub mod custom_placement;
 pub mod custom_nash_insert;
 pub mod custom_resident_check;
+pub mod custom_prerace_enter;
+pub mod custom_prerace_update;
+pub mod custom_reset_enter;
+pub mod custom_path_markers;
+pub mod custom_script_prepare;
 #[cfg(feature = "camera")]
 pub mod camera;
 /// Debug-only overrides behind environment switches.
@@ -150,6 +155,11 @@ pub fn overrides() -> Vec<(u32, GuestFn, &'static str)> {
     v.extend_from_slice(custom_placement::OVERRIDES);
     v.extend_from_slice(custom_nash_insert::OVERRIDES);
     v.extend_from_slice(custom_resident_check::OVERRIDES);
+    v.extend_from_slice(custom_prerace_enter::OVERRIDES);
+    v.extend_from_slice(custom_prerace_update::OVERRIDES);
+    v.extend_from_slice(custom_reset_enter::OVERRIDES);
+    v.extend_from_slice(custom_path_markers::OVERRIDES);
+    v.extend_from_slice(custom_script_prepare::OVERRIDES);
     v.extend_from_slice(movie::overrides());
     #[cfg(feature = "math")]
     v.extend_from_slice(math::OVERRIDES);

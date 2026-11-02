@@ -133,6 +133,18 @@ native stored key 18, with matching checkpoint IDs across alternate paths.
 Only supported SSX 3 AI event keys are retained. SSX 3's AI code consumes the
 converted routes; the Tricky AI is not imported.
 
+The native marker reader translates serialized types 0/1 into runtime
+start/recovery types 1/2, and resolves each marker's AIPath and TrackPath
+indices. Markers remain in their resident world-resource buffer. The native
+pre-race loader creates and loads the SSX 3 competitors, calls AI_Restart to
+place them on this grid, then advances to the round card and countdown.
+
+Custom courses suppress the template's queued presentation choices (fly-over,
+approach, gate idle and podium). Their camera paths belong to Snow Jam. Empty
+presentation lists retain native state 0, so the pre-race synchronization
+continues through normal rider loading instead of waiting for a template
+cinematic. Original tracks retain their presentation choices.
+
 ## Surface policy
 
 `tools/ssx3_surfaces.py` is the explicit mapping. It selects native SSX 3

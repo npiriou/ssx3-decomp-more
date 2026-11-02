@@ -5417,3 +5417,9 @@
 0x00154ee8    BEScoreInt_SubmitPlacement
 0x00328c20    SpatialHash_Insert
 0x0022d278    SectionMan_IsEventLoaded
+# Additional-course start-grid and native pre-race loading
+0x002341d0    GameStatePreRaceLoad_Enter
+0x002343b0    GameStatePreRaceLoad_Update
+0x002355c0    GameStateReset_Enter
+0x0026b880    PathData_ReadMarkers
+0x00276270    ScriptList_Prepare
