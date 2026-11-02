@@ -70,6 +70,11 @@ pub mod custom_model_parts;
 pub mod custom_menu_panels;
 pub mod custom_model_dma_nodes;
 pub mod custom_load_shape_texture;
+pub mod custom_anger_render;
+pub mod custom_fx_texture_load;
+pub mod custom_texture_load;
+pub mod custom_temp_texture;
+pub mod custom_luno_execute;
 #[cfg(feature = "camera")]
 pub mod camera;
 /// Debug-only overrides behind environment switches.
@@ -192,6 +197,11 @@ pub fn overrides() -> Vec<(u32, GuestFn, &'static str)> {
     v.extend_from_slice(custom_menu_panels::OVERRIDES);
     v.extend_from_slice(custom_model_dma_nodes::OVERRIDES);
     v.extend_from_slice(custom_load_shape_texture::OVERRIDES);
+    v.extend_from_slice(custom_anger_render::OVERRIDES);
+    v.extend_from_slice(custom_fx_texture_load::OVERRIDES);
+    v.extend_from_slice(custom_texture_load::OVERRIDES);
+    v.extend_from_slice(custom_temp_texture::OVERRIDES);
+    v.extend_from_slice(custom_luno_execute::OVERRIDES);
     v.extend_from_slice(movie::overrides());
     #[cfg(feature = "math")]
     v.extend_from_slice(math::OVERRIDES);

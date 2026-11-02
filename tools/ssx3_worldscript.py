@@ -10,13 +10,22 @@ from tricky_assets import FormatError
 
 def pack_world_script(pbd: dict, models: list[dict], source: dict,
                        instances: list[int], section_id: int, version: bytes,
-                       mesh_counts: dict[int, int]) -> tuple[bytes, dict]:
+                       mesh_counts: dict[int, int], interactives=None) -> tuple[bytes, dict]:
     properties = bytearray()
     offsets = []
     instance_properties = []
     unique = {}
     physics_base = len(source["collisions"])
     for instance_id in instances:
+        if interactives and instance_id in interactives.properties:
+            native = interactives.properties[instance_id]
+            key = ("native", native)
+            if key not in unique:
+                unique[key] = len(offsets)
+                offsets.append(len(properties))
+                properties.extend(native)
+            instance_properties.append(unique[key])
+            continue
         instance = pbd["instances"][instance_id]
         source_index = source["instance_properties"][instance_id]
         prop = source["properties"][source_index]
@@ -48,19 +57,28 @@ def pack_world_script(pbd: dict, models: list[dict], source: dict,
             part_data = struct.pack("<2fHh", prop["mass"], prop["bounce"], contact_flags, native_surface)
             properties.extend(part_data * parts)
         instance_properties.append(unique[key])
+    if interactives:
+        for _ in interactives.posts:
+            key = ("native", interactives.post_properties)
+            if key not in unique:
+                unique[key] = len(offsets)
+                offsets.append(len(properties))
+                properties.extend(interactives.post_properties)
+            instance_properties.append(unique[key])
     if len(offsets) > 65535:
         raise FormatError("custom world has too many native object properties")
     out = bytearray(92)
     struct.pack_into("<3I", out, 0, 0x1000, 0x3800, 0)
     out[12:16] = version
-    # Script globals, functions, missions, processes and effect slots are
-    # empty. Collision/visibility and rail tables are native world data.
+    # No Tricky scripts or native career/event missions are imported.
     for count, pointer in ((0x10, 0x14), (0x18, 0x1c), (0x20, 0x24),
                             (0x28, 0x2c), (0x30, 0x34), (0x38, 0x3c)):
         struct.pack_into("<II", out, count, 0, 92)
+    if interactives:
+        interactives.pack_script_tables(out)
     struct.pack_into("<I", out, 0x40, len(out))
     out.extend(properties)
-    struct.pack_into("<2I", out, 0x44, len(instances), len(out))
+    struct.pack_into("<2I", out, 0x44, len(instance_properties), len(out))
     out.extend(struct.pack("<" + "H" * len(instance_properties), *instance_properties))
     out.extend(b"\0" * (-len(out) % 4))
     struct.pack_into("<2I", out, 0x4c, len(offsets), len(out))
@@ -76,5 +94,5 @@ def pack_world_script(pbd: dict, models: list[dict], source: dict,
         native_surface = surface(spline["style"]).native_id
         out.extend(struct.pack("<I", (native_surface << 16) | flags))
     return bytes(out), {"native_object_properties": len(offsets),
-                        "native_instance_assignments": len(instances),
+                        "native_instance_assignments": len(instance_properties),
                         "native_rail_assignments": len(splines)}

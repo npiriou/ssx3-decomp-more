@@ -155,8 +155,7 @@ pub fn install() -> bool {
                     .or_else(|| {
                         let dir = repo_root().join(".cache/overlay");
                         dir.join("custom-tracks.ready").is_file().then_some(dir)
-                    })
-                {
+                    }) {
                     Some(dir) => {
                         if !dir.is_dir() {
                             eprintln!(
@@ -180,11 +179,17 @@ pub fn install() -> bool {
         }
     };
     let custom_assets = match &src {
-        Source::Overlay { dir, .. } | Source::Dir(dir) =>
-            dir.join("custom-tracks.ready").is_file(),
+        Source::Overlay { dir, .. } | Source::Dir(dir) => dir.join("custom-tracks.ready").is_file(),
         Source::Iso(_) => false,
     };
     crate::custom_tracks::set_assets_available(custom_assets);
+    let texture_slots = match &src {
+        Source::Overlay { dir, .. } | Source::Dir(dir) if custom_assets => {
+            world_texture_slots(dir).unwrap_or(1500)
+        }
+        _ => 1500,
+    };
+    crate::custom_tracks::set_world_texture_slots(texture_slots);
     *STATE.lock().unwrap() = Some(State {
         src,
         files: Vec::new(),
@@ -206,6 +211,44 @@ pub fn install() -> bool {
         );
     }
     true
+}
+
+/// Read just the BIGF directory and SDB's shared-image counts. This happens
+/// before TexMan/FX initialization, while no world textures are resident.
+fn world_texture_slots(root: &std::path::Path) -> Option<u32> {
+    let mut file = File::open(root.join("DATA/WORLDS/BAM.BIG")).ok()?;
+    let mut fixed = [0u8; 16];
+    file.read_exact(&mut fixed).ok()?;
+    if &fixed[..4] != b"BIGF" {
+        return None;
+    }
+    let count = u32::from_be_bytes(fixed[8..12].try_into().ok()?);
+    let size = u32::from_be_bytes(fixed[12..16].try_into().ok()?) as usize;
+    if count > 1024 || !(16..=1024 * 1024).contains(&size) {
+        return None;
+    }
+    let mut directory = vec![0; size - 16];
+    file.read_exact(&mut directory).ok()?;
+    let mut cursor = 0;
+    for _ in 0..count {
+        let offset = u32::from_be_bytes(directory.get(cursor..cursor + 4)?.try_into().ok()?);
+        let start = cursor + 8;
+        let end = start + directory.get(start..)?.iter().position(|b| *b == 0)?;
+        if directory
+            .get(start..end)?
+            .eq_ignore_ascii_case(b"data/worlds/bam.sdb")
+        {
+            file.seek(SeekFrom::Start(offset as u64 + 42)).ok()?;
+            let mut counts = [0u8; 4];
+            file.read_exact(&mut counts).ok()?;
+            let shapes = u16::from_le_bytes([counts[0], counts[1]]) as u32;
+            let lightmaps = u16::from_le_bytes([counts[2], counts[3]]) as u32;
+            let total = shapes + lightmaps;
+            return (total < 1999).then_some(total.max(1500));
+        }
+        cursor = end + 1;
+    }
+    None
 }
 
 /// `EAFile_ResolvePath` (0x3e3098), natively: the device a path names and

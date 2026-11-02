@@ -17,6 +17,7 @@ import struct
 
 from ssx3_aip import convert_tricky_aip, inspect_world_aip
 from ssx3_collision import pack_collision, pack_sphere_tree
+from ssx3_interactives import NativeInteractives
 from ssx3_models import pack_instance, pack_model
 from ssx3_splines import convert_splines, spline_template
 from ssx3_surfaces import patch_surface
@@ -77,9 +78,14 @@ def build(SSX3_iso: Path, tricky_iso: Path, output: Path) -> dict:
                         pbd["counts"], True)
     race_instances = sorted({index for node in spatial["nodes"]
                              for index in node["race_instances"]})
+    interactives = NativeInteractives(
+        ssb, streams, template_location,
+        read_cofb_member(tricky_archive, "data/models/gari.map"),
+        pbd, models, race_instances)
     # Follow Race scenery dependencies before assigning native IDs. Compact
     # local tables avoid sparse slots that native resource loops can visit.
-    source_models = {pbd["instances"][index]["model_id"] for index in race_instances}
+    source_models = {pbd["instances"][index]["model_id"] for index in race_instances
+                     if index not in interactives.replacements}
     # Tricky terrain TextureAssignment indexes SSH images directly.
     # Only prefab meshes use the separate material table.
     source_materials = set()
@@ -92,6 +98,9 @@ def build(SSX3_iso: Path, tricky_iso: Path, output: Path) -> dict:
                  if material["index"] in source_materials]
     if len(materials) != len(material_ids):
         raise FormatError("Race geometry references a missing source material")
+    source_to_instance = {source: rid for rid, source in enumerate(race_instances)}
+    interactives.prepare(section_id, leaf_id, len(model_ids), len(material_ids),
+                         source_to_instance)
     source_textures = {patch["texture_assignment"] for patch in pbd["patches"]}
     source_textures.update(material["texture_id"] for material in materials)
     source_lightmaps = {patch["lightmap_id"] for patch in pbd["patches"]}
@@ -104,6 +113,7 @@ def build(SSX3_iso: Path, tricky_iso: Path, output: Path) -> dict:
         read_cofb_member(tricky_archive, "data/models/gari_l.ssh")) if rid in source_lightmaps]
     texture_ids = {rid for rid, _ in textures}
     lightmap_ids = {rid for rid, _ in lightmaps}
+    lightmap_sizes = {rid: struct.unpack_from("<2H", body, 4) for rid, body in lightmaps}
     if max(texture_ids, default=-1) + texture_base > 32767:
         raise FormatError("Garibaldi texture IDs exceed the SSX 3 format")
     leaf = bytearray()
@@ -115,6 +125,8 @@ def build(SSX3_iso: Path, tricky_iso: Path, output: Path) -> dict:
         body = to_world_ssh(source, lightmap=True)
         inspect_world_ssh(body, lightmap=True)
         leaf.extend(pack_resource(10, 255, lightmap_base + rid, body))
+    for rid, body in interactives.textures():
+        leaf.extend(pack_resource(9, 255, rid, body))
     shared = bytearray()
     for material in materials:
         if material["texture_id"] not in texture_ids:
@@ -132,6 +144,8 @@ def build(SSX3_iso: Path, tricky_iso: Path, output: Path) -> dict:
                                      material_rids=material_ids)
         shared.extend(pack_resource(2, section_id, rid, payload))
         model_layouts[model["index"]] = layout
+    for kind, rid, payload in interactives.records():
+        shared.extend(pack_resource(kind, section_id, rid, payload))
     mesh_counts = {}
     for collision in collision_data["collisions"]:
         payload = pack_collision(collision)
@@ -142,14 +156,16 @@ def build(SSX3_iso: Path, tricky_iso: Path, output: Path) -> dict:
         shared.extend(pack_resource(12, section_id, physics_base + physics["index"],
                                     pack_sphere_tree(physics)))
     instance_bounds = []
-    source_to_instance = {}
     collision_bindings = []
     instance_flags = []
     for rid, index in enumerate(race_instances):
         instance = pbd["instances"][index]
-        payload = pack_instance(instance, model_layouts[instance["model_id"]],
-                                section_id, leaf_id, resource_id=rid,
-                                model_resource_id=model_ids[instance["model_id"]])
+        if index in interactives.instance_payloads:
+            payload = interactives.instance_payloads[index]
+        else:
+            payload = pack_instance(instance, model_layouts[instance["model_id"]],
+                                    section_id, leaf_id, resource_id=rid,
+                                    model_resource_id=model_ids[instance["model_id"]])
         shared.extend(pack_resource(3, section_id, rid, payload))
         source_to_instance[index] = rid
         instance_bounds.append((instance["bounds_min"], instance["bounds_max"]))
@@ -174,7 +190,17 @@ def build(SSX3_iso: Path, tricky_iso: Path, output: Path) -> dict:
         for axis in range(3):
             world_min[axis] = min(world_min[axis], bounds_min[axis])
             world_max[axis] = max(world_max[axis], bounds_max[axis])
-        geometry = {**patch, "bounds_min": bounds_min, "bounds_max": bounds_max}
+        # Tricky's tile has edge samples but no duplicated gutter. Address
+        # the centers of its first/last texels, keeping the shared edge
+        # lighting and excluding neighbouring atlas tiles from filtering.
+        width, height = lightmap_sizes[patch["lightmap_id"]]
+        u, v, du, dv = patch["lightmap_vector"]
+        lightmap_uv = [u + 0.5 / width, v + 0.5 / height,
+                       du - 1 / width, dv - 1 / height]
+        if lightmap_uv[2] <= 0 or lightmap_uv[3] <= 0:
+            raise FormatError("Tricky lightmap tile has no interior texels")
+        geometry = {**patch, "bounds_min": bounds_min, "bounds_max": bounds_max,
+                    "lightmap_vector": lightmap_uv}
         native_surface, terrain_flags = patch_surface(patch["surface_type"])
         prefix = struct.pack(
             "<2I4h", 0x4f7b36c0, 0x004045b7,
@@ -204,7 +230,8 @@ def build(SSX3_iso: Path, tricky_iso: Path, output: Path) -> dict:
     shared.extend(pack_resource(14, section_id, 1, b""))
     shared.extend(pack_resource(14, section_id, 2, b""))
     world_script, script_summary = pack_world_script(
-        pbd, models, collision_data, race_instances, section_id, sdb[4:8], mesh_counts)
+        pbd, models, collision_data, race_instances, section_id, sdb[4:8], mesh_counts,
+        interactives)
     shared.extend(pack_resource(16, section_id, 0, world_script))
     new_sdb, new_ssb = append_location(
         sdb, ssb, name="GARI", bounds_min=tuple(world_min),
@@ -234,9 +261,13 @@ def build(SSX3_iso: Path, tricky_iso: Path, output: Path) -> dict:
         "shared_stream": leaf_id + 1, "world_bounds_min": world_min,
         "world_bounds_max": world_max, "texture_count": len(textures),
         "lightmap_count": len(lightmaps),
+        "world_texture_slots": shared_next_id(new_sdb, 9) + shared_next_id(new_sdb, 10),
         "spline_count": len(splines),
-        "model_count": len(model_ids), "material_count": len(material_ids),
-        "source_model_count": len(models), "instance_count": len(race_instances),
+        "model_count": len(model_ids) + len(interactives.model_ids),
+        "material_count": len(material_ids) + len(interactives.material_ids),
+        "source_model_count": len(models),
+        "instance_count": len(race_instances) + len(interactives.posts),
+        **interactives.summary(),
         "collision_count": physics_base + len(collision_data["physics"]),
         "mesh_collision_count": physics_base,
         "sphere_collision_count": len(collision_data["physics"]),

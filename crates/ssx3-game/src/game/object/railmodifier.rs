@@ -3337,6 +3337,8 @@ pub fn tex_flip_modifier_apply_frame(c: &mut Cpu) {
 /// `TexMan_InitTable(self)` (0x3670e0): zero the table header and link the
 /// 499 free-list entries.
 pub fn tex_man_init_table(c: &mut Cpu) {
+    let world_slots = crate::custom_tracks::world_texture_slots();
+    let free_links = 1999 - world_slots;
     guest(c, |c| {
         c.cycles += 14;
         let frame = Frame::open(c, 0x20);
@@ -3349,7 +3351,7 @@ pub fn tex_man_init_table(c: &mut Cpu) {
         c.g[A0][0] = sx(p(c.g[S0][0] as u32, 8));
         Addr(p(c.g[S0][0] as u32, 4)).sw(c, 0);
         call_ptr(c, 0x003e_6448, 0x0036_7108)?;
-        c.g[V0][0] = sx(p(c.g[S0][0] as u32, 0x1778));
+        c.g[V0][0] = sx(p(c.g[S0][0] as u32, 8 + world_slots * 4));
         c.g[A1][0] = 0;
         Addr(p(c.g[S0][0] as u32, 0x1f48)).sw(c, c.g[V0][0]);
         c.g[A2][0] = 0x4;
@@ -3361,7 +3363,7 @@ pub fn tex_man_init_table(c: &mut Cpu) {
             c.g[V1][0] = sx((c.g[A0][0] as u32).wrapping_add(c.g[A2][0] as u32));
             c.g[V0][0] = sx((c.g[V0][0] as u32).wrapping_add(c.g[A0][0] as u32));
             Addr(c.g[V0][0] as u32).sw(c, c.g[V1][0]);
-            c.g[V0][0] = ((c.g[A1][0] as i64) < 499i64) as u64;
+            c.g[V0][0] = ((c.g[A1][0] as i64) < free_links as i64) as u64;
             let more = c.g[V0][0] != 0;
             c.g[A2][0] = sx((c.g[A2][0] as u32).wrapping_add(4));
             if !more {

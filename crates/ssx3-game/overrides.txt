@@ -5442,3 +5442,8 @@
 0x00202ad8    EventSelect_UpdateModePanels
 0x003abf50    cPS2ChunkResolve_RelocateMeshDmaParts
 0x0037c8c0    PS2GraphicsMan_LoadTextureFromShape
+0x002d5048    cAngerFX_Render
+0x002dbd10    FXLoader_ctor
+0x00367440    TexMan_LoadTexture
+0x00366e90    TexMan_CopyToTempTex
+0x002227d0    LunoVM_Execute

@@ -113,15 +113,15 @@ The ordinary pause-menu Quit path reaches the same cleanup point.
 | Resource | Imported amount | Native representation |
 | --- | ---: | --- |
 | Terrain | 3,885 patches | Type 1 bicubic Bezier patches |
-| Materials | 116 | Type 0 WorldMaterial |
+| Materials | 114, including retail interactive props | Type 0 WorldMaterial |
 | Textures / lightmaps | 104 / 16 | Shared type 9 / 10 resources |
-| Models | 627, with 699 hierarchical parts | Type 2 MDR meshes |
-| Race instances | 3,236 of 3,393 source instances | Type 3 instances |
+| Models | 622, including retail interactive props | Type 2 MDR meshes |
+| Race instances | 3,246, including 10 native sign posts | Type 3 instances |
 | Mesh collision resources | 412 | Type 12 triangle meshes |
 | Sphere-tree collision resources | 56 | Type 12 native sphere bodies |
 | Rails | 169 splines, 542 segments | Type 8 WorldSpline |
 | AI routes / race routes | 90 / 14 | Type 14 WorldAIP |
-| Instance and rail properties | 528 property records | Type 16 native world data |
+| Instance and rail properties | 529 property records | Type 16 native world data |
 
 `tools/tricky_assets.py` reads ISO9660/COFB/RefPack, PBD geometry and LTG spatial
 lists. `tools/tricky_models.py` decodes prefab hierarchy, quantized vertices,
@@ -135,8 +135,8 @@ also contribute to the world bounds. Race/common LTG lists select scenery;
 Showoff-only instances are excluded.
 
 The builder follows Race instances to their models, material assignments and
-texture references before packaging. It imports 627 of the 648 source
-models, 116 of 125 materials and 104 of 121 textures. Local model/material IDs
+texture references before packaging. It imports 104 of 121 source textures;
+the native replacements below supply their own models/materials. Local model/material IDs
 are compacted together; the generated manifest preserves source-to-native
 ID maps. Shared texture IDs retain their source offsets in the appended
 global range. No model or material reference points into a removed slot.
@@ -151,9 +151,17 @@ Linear palettes are converted to native CLUT index order. All 128-byte
 image/palette headers explicitly store their relative data offset at +0x10;
 the 0x1000 flag requires that offset rather than an implicit header size.
 Lightmaps remain linear 32-bit images with the same offset convention.
+Tricky's 8x8 lightmap tiles use local (v,u) axes. Native `TessUV2` already
+matches this: U advances along grid rows and V along grid columns, while
+the geometric u parameter advances along columns. Keep the atlas pixels
+unchanged. The converter maps patch UV2 endpoints to the first/last texel
+centers, retaining shared edge samples and excluding neighbouring tiles
+from bilinear filtering. Across 944 shared snow edges, this native axis
+mapping gives a mean source border difference of 0.64 levels in RGBA8;
+an extra transpose gives 12.49. The corresponding Rust UV2 port is retained
+uninstalled in `custom_patch_uv2.rs`.
 
-The resulting texture leaf is 2,735,040 unpacked bytes and the shared world
-stream is 5,361,060 bytes. Native shared textures use the separate
+The generated ready marker records current stream sizes. Native shared textures use the separate
 `BxStream SHAREDMEM` allocator. Terrain, models, instances and collision data
 use the section allocator; textures do not consume its fixed 128 KiB blocks.
 The single texture leaf is retained for this first course. Spatial subdivision
@@ -165,8 +173,26 @@ colours from source light matrices and light colours. Native collision meshes
 use byte indices, splitting source meshes when necessary. Bounds cover each
 group of ten faces. Serialized sphere trees use the layout consumed by the
 native SSX 3 reader. `tools/ssx3_worldscript.py` supplies native instance flags,
-per-part contact properties, collider handles and rail flags. Its executable
-script/global/process tables are empty: no Tricky gameplay scripts run.
+per-part contact properties, collider handles and rail flags. No Tricky
+gameplay scripts run.
+
+`tools/ssx3_interactives.py` identifies the source placements by their MAP
+internal instance names. It replaces the two speed pickups, three trick
+pickups and ten intact/broken shortcut-panel pairs with retail ARA1 resources.
+Models retain their retail DMA chains and materials; native Luno scripts
+retain their internal offsets and remap only the panel's fragment handle.
+Section-wide Snow Jam processes and setup functions are excluded. The native
+focus/contact paths run the pickup setup and hit scripts. Pickup collection,
+panel breaking and the repaired anger exclamation have been confirmed in play
+by the user. A hand-written contact dispatcher is retained as an uninstalled
+port in `custom_object_trigger.rs`; the confirmed retail dispatch stays active.
+
+World shapes and lightmaps occupy 1,546 global texture IDs. TexMan's retail
+non-bound free list begins at 1,500, which allowed the appended lightmaps to
+overwrite global FX such as `exlm` (the angry rider's exclamation). Native
+file setup now reads the shared counts from the actual BAM.SDB before TexMan
+initialization and moves the free-list start past that range. Retail archives
+retain the 1,500-slot boundary and the total table remains 2,000 entries.
 
 The rail geometry preserves spline coefficients, lengths, bounds and global
 segment links. Source metal style 13 maps to native metal surface 10. Native
@@ -224,8 +250,8 @@ need visual/manual assessment during development.
 The menu path, world remapping, native collision bindings and result
 isolation are implemented. Normal menu selection has loaded the course, and
 a manual descent has reached Garibaldi's native results with all six riders
-classified. The subsequent texture conversion changes still need visual
-review. Restart, return, rails, respawn and original-course compatibility
+classified. The corrected snow textures have also been observed during a
+full manual descent. Restart, return, rails, respawn and original-course compatibility
 remain to be observed in play. No automated tests or replay gates are run.
 
 Source prefab animations are currently static. Source gameplay processes,

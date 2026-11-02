@@ -70,6 +70,9 @@ static TEMPLATE_WORLD_SECTION: AtomicU32 = AtomicU32::new(u32::MAX);
 static LEASED_MAP_SLOT: AtomicU32 = AtomicU32::new(u32::MAX);
 static BONUS_SELECTED: AtomicBool = AtomicBool::new(false);
 static ASSETS_AVAILABLE: AtomicBool = AtomicBool::new(false);
+// Retail reserves slots 0..1500 for streamed WorldSSH shapes/lightmaps.
+// An appended world can extend that range; global FX must start after it.
+static WORLD_TEXTURE_SLOTS: AtomicU32 = AtomicU32::new(1500);
 static TRACK_INFO: AtomicU32 = AtomicU32::new(0);
 static MENU_ACTION_FRAME: AtomicU32 = AtomicU32::new(u32::MAX);
 // The template's native loading code consumes one fixed 40-byte residency
@@ -125,6 +128,14 @@ pub fn set_assets_available(available: bool) {
 
 pub fn assets_available() -> bool {
     ASSETS_AVAILABLE.load(Ordering::Acquire)
+}
+
+pub fn set_world_texture_slots(slots: u32) {
+    WORLD_TEXTURE_SLOTS.store(slots.max(1500), Ordering::Release);
+}
+
+pub fn world_texture_slots() -> u32 {
+    WORLD_TEXTURE_SLOTS.load(Ordering::Acquire)
 }
 
 /// The custom menu category is separate from the guest's three-peak index.
