@@ -14,21 +14,24 @@ machine the image paths are:
 $env:SSX3_ISO = 'X:\dev\ssx3\SSX 3 (USA).iso'
 $env:SSX_TRICKY_ISO = 'X:\dev\SSX Tricky (USA).iso'
 cd X:\dev\ssx3-decomp-more
-py tools/tricky_assets.py --output .cache\garibaldi-patches.json
+py tools/tricky_assets.py --output .cache\garibaldi-world.json
 ```
 
 The converter verifies Tricky's disc serial, reads `DATA/MODELS/GARI.BIG`
-through ISO9660, expands the C0FB member `data/models/gari.pbd` with RefPack,
-and writes an inspectable JSON file. Its output preserves each patch's 16
-power-basis coefficient vectors, UV vectors, lightmap vector, corners, bounds,
-texture assignment and surface type. The output goes in `.cache/`, which is
-ignored by Git because it derives from EA's disc.
+through ISO9660, and expands its RefPack members. The inspectable JSON
+preserves the PBD terrain patches, instance transforms and materials; the LTG
+spatial grid with patch, instance and spline segment IDs; and the AIP AI paths
+and race line. It retains each patch's 16 power-basis coefficient vectors, UV
+vectors, lightmap vector, corners, bounds, texture assignment and surface
+type. The output goes in `.cache/`, which is ignored by Git because it derives
+from EA's disc.
 
 For a source summary without output files:
 
 ```powershell
 py tools/tricky_assets.py
 py tools/tricky_assets.py --track SNOW
+py tools/tricky_assets.py --list-members
 ```
 
 The original SSX 3 events can be launched with the existing game command,
@@ -57,6 +60,20 @@ all 3,885 Garibaldi patches agree with their four stored corners to at most
 0.0234375 world units. This verifies source order and basis; it does **not**
 yet verify matching coordinate scale, UV conventions, collision behaviour or
 the fields needed in an SSX 3 world section.
+
+The LTG grid has 23 × 31 main cells, 243 occupied, each subdivided 4 × 4.
+Every one of the 3,885 patches, 3,393 instances and 542 spline segments
+appears exactly once in its resource lists. The AIP contains 90 AI paths with
+2,105 points and 14 race-line paths with 756 points. Reconstructing each path
+from its origin and `(direction × distance)` vectors agrees with the stored
+path bounds to at most 0.001574 world units. These paths are source geometry
+for adaptation to SSX 3; the Tricky AI is not executed.
+
+SSX 3's `DATA/WORLDS/BAM.BIG` is a different BIGF archive. Its `bam.sdb`
+describes 49 named locations, 183 spatial chunks and 159 streaming chunks;
+`bam.ssb` holds compressed resource streams. The source LTG cells cannot be
+substituted for those SDB/SSB structures. A standalone Garibaldi world needs
+its own section graph and the resources the game expects in each section.
 
 ## Integration boundaries
 
