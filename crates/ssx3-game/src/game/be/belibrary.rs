@@ -739,6 +739,15 @@ pub fn beb_bolt_int_set_bolt_states(c: &mut Cpu) {
 /// score table for the event record (`D_00535C18 + type*100`), null for the
 /// record type 26.
 pub fn be_score_int_get_high_score_table(c: &mut Cpu) {
+    if crate::custom_tracks::active().is_some()
+        && crate::abi::arg(c, 0) == c.bus.read32(0x0053_05f0)
+    {
+        // The bounded template course is a loading/rules identifier. Its
+        // official leaderboard does not describe the active custom course.
+        crate::abi::set_ret(c, 0);
+        crate::abi::ret(c);
+        return;
+    }
     guest(c, |c| {
         c.cycles += 8;
         let frame = Frame::open(c, 0x10);

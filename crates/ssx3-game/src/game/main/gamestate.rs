@@ -1621,6 +1621,7 @@ pub fn game_state_reset_overlay_exit(c: &mut Cpu) {
 /// module for state 0xE (leaving the results screen).
 pub fn game_state_results_update(c: &mut Cpu) {
     guest(c, |c| {
+        let results = r(c, A0);
         c.cycles += 6;
         let frame = Frame::open(c, 0x10);
         c.g[V0][0] = 1;
@@ -1635,7 +1636,16 @@ pub fn game_state_results_update(c: &mut Cpu) {
             c.g[A3][0] = 0;
             let module = c.lw_r_2(A0, (world as u32).wrapping_add(0x84));
             let _ = module;
-            callee::GAME_MODULE_REQUEST_STATE.call(c, 0x0023_6e90)?;
+            if crate::custom_tracks::active().is_some() {
+                // Additional courses have no Conquer-the-Mountain transport
+                // destination. Leave through the native front-end load path;
+                // keep the custom context until the world has shut down.
+                c.sw(results.wrapping_add(8), 0);
+                c.g[A1][0] = 0;
+                call_ptr(c, 0x0023_0488, 0x0023_6e90)?;
+            } else {
+                callee::GAME_MODULE_REQUEST_STATE.call(c, 0x0023_6e90)?;
+            }
             frame.restore_ra(c, 0);
         }
         c.cycles += 2;

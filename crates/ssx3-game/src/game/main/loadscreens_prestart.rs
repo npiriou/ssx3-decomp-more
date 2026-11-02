@@ -1346,6 +1346,12 @@ pub fn c_pre_fe_load_screen_update(c: &mut Cpu) {
         frame.restore(c, S0, 0x10);
         if c.g[V1][0] == 0 {
             c.cycles += 19;
+            if crate::custom_tracks::active().is_some() {
+                // The app has reached its front-end loading screen after
+                // closing the game world. Restore the temporary section and
+                // residency mappings before constructing the front end.
+                crate::custom_tracks::deactivate(c);
+            }
             c.g[A1][0] = 0x004a_2ab8;
             c.g[A0][0] = 0x1c;
             c.g[A2][0] = 0x100;

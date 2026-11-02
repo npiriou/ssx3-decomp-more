@@ -82,8 +82,22 @@ for custom results. `custom_results.rs` retains the native result snapshot
 but skips high-score, record and character-profile writes for custom tracks.
 `custom_placement.rs` retains placement and skips career points/medals.
 `custom_finish_dispatch.rs` keeps the native finish handler and suppresses
-peak rewards for custom events. Custom best times are currently session-only;
-there is no custom save-file format yet.
+peak rewards for custom events. Run times and placements live in the native
+per-session results. The template's official leaderboard is not returned for
+the active custom course; there is no Garibaldi leaderboard or custom
+save-file format yet.
+
+The finish overlay remains native. Custom worlds leave both finish
+presentation queues empty, so the finish sequencer chooses Results rather
+than a cinematic authored for Snow Jam. The associated first-time-profile
+and race-end profile updates are excluded for custom events as well.
+
+Restart retains the active custom world and uses the native computer-rider
+rebuild, start-marker placement and countdown. Continuing out of Results
+uses the native front-end loading screen instead of the career transport
+state. The custom context remains active during world shutdown, then the
+front-end load path restores the leased section mapping and residency row.
+The ordinary pause-menu Quit path reaches the same cleanup point.
 
 ## Converted Garibaldi resources
 
@@ -130,6 +144,7 @@ alternates. It creates six starting lanes from the source starter AI paths,
 recovery anchors at the main route junctions and a finish anchor. Source
 finish key 9 becomes native stored key 0; source checkpoint key 11 becomes
 native stored key 18, with matching checkpoint IDs across alternate paths.
+Garibaldi's three main-course gates become checkpoint indices 0, 1 and 2.
 Only supported SSX 3 AI event keys are retained. SSX 3's AI code consumes the
 converted routes; the Tricky AI is not imported.
 

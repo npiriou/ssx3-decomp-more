@@ -5423,3 +5423,10 @@
 0x002355c0    GameStateReset_Enter
 0x0026b880    PathData_ReadMarkers
 0x00276270    ScriptList_Prepare
+# Additional-course finish, restart and native front-end return
+0x00233cd8    GameStateFinish_Update
+0x00235aa0    GameStateRestartRace_Enter
+0x00236da0    GameStateResults_Enter
+0x00230488    GameModule_QuitToLoadScreen
+0x0027a860    ScriptEngine_QueueFinishScripts
+0x0027ac60    ScriptEngine_QueueRaceCutscene

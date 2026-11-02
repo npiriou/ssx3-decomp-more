@@ -54,6 +54,12 @@ pub mod custom_prerace_update;
 pub mod custom_reset_enter;
 pub mod custom_path_markers;
 pub mod custom_script_prepare;
+pub mod custom_finish_update;
+pub mod custom_restart_enter;
+pub mod custom_results_enter;
+pub mod custom_quit_load_screen;
+pub mod custom_finish_script_queue;
+pub mod custom_race_cutscene_queue;
 #[cfg(feature = "camera")]
 pub mod camera;
 /// Debug-only overrides behind environment switches.
@@ -160,6 +166,12 @@ pub fn overrides() -> Vec<(u32, GuestFn, &'static str)> {
     v.extend_from_slice(custom_reset_enter::OVERRIDES);
     v.extend_from_slice(custom_path_markers::OVERRIDES);
     v.extend_from_slice(custom_script_prepare::OVERRIDES);
+    v.extend_from_slice(custom_finish_update::OVERRIDES);
+    v.extend_from_slice(custom_restart_enter::OVERRIDES);
+    v.extend_from_slice(custom_results_enter::OVERRIDES);
+    v.extend_from_slice(custom_quit_load_screen::OVERRIDES);
+    v.extend_from_slice(custom_finish_script_queue::OVERRIDES);
+    v.extend_from_slice(custom_race_cutscene_queue::OVERRIDES);
     v.extend_from_slice(movie::overrides());
     #[cfg(feature = "math")]
     v.extend_from_slice(math::OVERRIDES);
