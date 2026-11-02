@@ -183,7 +183,9 @@ def build(SSX3_iso: Path, tricky_iso: Path, output: Path) -> dict:
             geometry, prefix=prefix,
             object_id=bytes([section_id]) + rid.to_bytes(3, "little"),
             u10=section_id << 8, chunk_id=leaf_id,
-            texture_rid=material_ids[patch["texture_assignment"]],
+            # Terrain binds a TexMan image ID directly, unlike MDR meshes
+            # whose material index resolves through the model's table.
+            texture_rid=texture_base + pbd["materials"][patch["texture_assignment"]]["texture_id"],
             lightmap_rid=lightmap_base + patch["lightmap_id"],
             tail=patch_tail,
         )

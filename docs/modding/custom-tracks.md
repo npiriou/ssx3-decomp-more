@@ -1,9 +1,9 @@
 # Additional Single Event tracks
 
 This checkout implements a fourth native **Bonus** menu category and a
-Garibaldi Race importer. The code and local assets are present; an entire
-controller-driven race has not yet been observed. Tests and replay gates
-are stopped at the user's request.
+Garibaldi Race importer. A manually played race has reached the native
+results with six classified riders (Zoe: 3:45). Automated tests and replay
+gates are stopped at the user's request; visual development uses the game.
 
 ## Prepare and start
 
@@ -140,6 +140,13 @@ models, 117 of 125 materials and 53 of 121 textures. Local model/material IDs
 are compacted together; the generated manifest preserves source-to-native
 ID maps. Shared texture IDs retain their source offsets in the appended
 global range. No model or material reference points into a removed slot.
+Terrain stores the global texture ID directly; its source material is
+dereferenced during conversion. MDR meshes retain their local material
+indices and resolve them through the native model material table.
+
+Tricky's linear 8-bit texels are converted to PS2 PSMT8 byte addresses, and
+linear palettes to the native CLUT index order. Source entries already
+marked as swizzled retain their bytes. Lightmaps remain 32-bit images.
 
 The resulting texture leaf is 1,833,768 unpacked bytes and the shared world
 stream is 5,361,088 bytes. Native shared textures use the separate
@@ -210,12 +217,12 @@ need visual/manual assessment during development.
 
 ## Current limits and remaining development
 
-The menu path, world remapping, generated asset formats, native collision
-bindings and result isolation are implemented in code. They do not establish
-that the complete race currently runs from menu to finish. Controller focus,
-resource memory pressure, loading transitions, AI, rails, finish, restart and
-return still need to be observed in play. No new tests or replay gates are
-being run.
+The menu path, world remapping, native collision bindings and result
+isolation are implemented. Normal menu selection has loaded the course, and
+a manual descent has reached Garibaldi's native results with all six riders
+classified. The subsequent texture conversion changes still need visual
+review. Restart, return, rails, respawn and original-course compatibility
+remain to be observed in play. No automated tests or replay gates are run.
 
 Source prefab animations are currently static. Source gameplay processes,
 lights, particles and ambient audio are not executed/imported as Tricky

@@ -1,6 +1,7 @@
 """Repackage Tricky PS2 SSH images as SSX 3 world texture resources.
 
-The swizzled texels and palette bytes are copied unchanged. Tricky SHPS
+Tricky SHPS can store linear texels and palettes; SSX 3 world textures use
+the PS2 PSMT8 address and CLUT permutations. Tricky SHPS
 entries use 16-byte subheaders; SSX 3 world SSH entries use 128-byte headers
 for both the image and palette. No texture image is stored in this repository.
 """
@@ -10,6 +11,31 @@ from __future__ import annotations
 import struct
 
 from tricky_assets import FormatError
+
+
+def _psmt8_bytes(linear: bytes, width: int, height: int) -> bytes:
+    """Place linear texels at their PS2 PSMT8 byte addresses."""
+    if width % 16 or height % 16:
+        raise FormatError("world PSMT8 texture dimensions must be multiples of 16")
+    result = bytearray(len(linear))
+    for y in range(height):
+        # Within each sixteen-row tile the row bits are ordered 3,2,0.
+        row = (y & ~15) + 2 * ((y & 1) | ((y >> 1) & 6))
+        for x in range(width):
+            low = ((y >> 1) & 1) | ((x >> 2) & 2) | ((x & 3) << 2)
+            low |= (((x >> 2) ^ (y >> 1) ^ (y >> 2)) & 1) << 4
+            address = row * width + ((x & ~15) << 1) + low
+            result[address] = linear[y * width + x]
+    return bytes(result)
+
+
+def _psmt8_palette(linear: bytes) -> bytes:
+    """PSMT8 CLUT addressing exchanges index bits 3 and 4."""
+    result = bytearray(1024)
+    for index in range(256):
+        slot = (index & ~0x18) | ((index & 8) << 1) | ((index & 16) >> 1)
+        result[slot * 4:slot * 4 + 4] = linear[index * 4:index * 4 + 4]
+    return bytes(result)
 
 
 def parse_shps(data: bytes) -> list[tuple[int, bytes]]:
@@ -66,9 +92,15 @@ def to_world_ssh(source: bytes, *, lightmap: bool) -> bytes:
     header[13] = 0x30  # Retail WorldSSH's indexed texture mode.
     palette = bytearray(128)
     palette[0] = 0x21
-    struct.pack_into("<3H", palette, 4, 255, 1, 255)
+    struct.pack_into("<3H", palette, 4, 256, 1, 256)
     palette[13] = 0x30
-    return bytes(header) + source[16:size] + bytes(palette) + source[size + 16:size + 16 + 1024]
+    pixels = source[16:size]
+    colours = source[size + 16:size + 16 + 1024]
+    if not struct.unpack_from("<I", source, 12)[0] & 0x2000:
+        pixels = _psmt8_bytes(pixels, width, height)
+    if not struct.unpack_from("<I", source, size + 12)[0] & 0x2000:
+        colours = _psmt8_palette(colours)
+    return bytes(header) + pixels + bytes(palette) + colours
 
 
 def inspect_world_ssh(data: bytes, *, lightmap: bool) -> dict:
