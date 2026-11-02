@@ -336,6 +336,18 @@ impl ApplicationHandler for App {
                             });
                         }
                     }
+                    if code == KeyCode::F8 && pressed && !event.repeat {
+                        if let Some(dir) = std::env::var_os("SSX3_DEBUG_SNAPSHOT") {
+                            let dir = std::path::PathBuf::from(dir);
+                            let frame = ssx3_ps2::m!(self.cpu).sched.frames;
+                            let result = std::fs::create_dir_all(&dir).and_then(|_| {
+                                std::fs::write(dir.join(format!("ram-{frame}.bin")), &self.cpu.bus.ram[..])
+                            });
+                            let details = format!("{}\npc={:#x}\nregisters={:?}\n", game::status(&self.cpu), self.cpu.pc, self.cpu.g);
+                            let _ = std::fs::write(dir.join(format!("state-{frame}.txt")), details);
+                            eprintln!("[debug snapshot] frame {frame}: {result:?}");
+                        }
+                    }
                     if code == KeyCode::F12 && event.state == ElementState::Pressed {
                         // The image on screen: the native renderer's while it is active.
                         let native = self

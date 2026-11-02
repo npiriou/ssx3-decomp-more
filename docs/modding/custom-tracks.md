@@ -59,6 +59,13 @@ copy supplies the selected course display name while retaining bounded native ra
 setup fields. SSX 3 remains responsible for riders, physics, tricks, controls,
 HUD, camera, countdown, progression, respawn and results.
 
+With the prepared overlay, the native geometry pool retains its 53 block
+descriptors and 128 KiB block size but allocates each payload on first use.
+Releasing a section returns its payloads to the named heap. This prevents
+unused geometry reservations from exhausting shared-texture memory: Alaska
+uses 27 blocks while its full-resolution leaf textures need about 4 MiB.
+The retail allocator's packing, resource sizes and texture pixels are unchanged.
+
 The native UI additions live in the derived FE.LUI and locale file:
 
 - Peak Tricky appears above Peak 3. Host course IDs and retail UIObject IDs
@@ -259,25 +266,26 @@ need visual/manual assessment during development.
 ## Current limits and remaining development
 
 The menu path, world remapping, native collision bindings and result
-isolation are implemented. Normal menu selection has loaded the course, and
-a manual descent has reached Garibaldi's native results with all six riders
-classified. The corrected snow textures have also been observed during a
-full manual descent. Restart, return, rails, respawn and original-course compatibility
-remain to be observed in play. No automated tests or replay gates are run.
+isolation are implemented. A manual Garibaldi descent reached native results
+with all six riders classified and uniform snow. All 19 catalog variants
+have opened in the windowed game. The Peak Tricky menu, original loading
+cards, a same-session Garibaldi-to-Mesablanca switch and Alaska Race to
+Freestyle switch have also been observed. These openings establish loading
+and initial rendering, rather than a full descent of every course.
+No automated tests or replay gates are run.
 
 Source prefab animations are currently static. Source gameplay processes,
 lights, particles and ambient audio are not executed/imported as Tricky
 systems. Instance lighting is baked; terrain uses source lightmaps. The
-native template sky and ambiance remain in use. Some target-only spline,
+original Tricky sky geometry/materials/textures replace the template sky;
+native template ambiance remains in use. Some target-only spline,
 patch and material fields use retail defaults and still need refinement.
 
-To add another course, register a stable catalog ID, append a separate BAM
-location, generate its native routes/properties and add its own UI/locale
-rows. Extend the explicit surface table when a new source type appears. Do
-not enlarge or use out-of-range indices in official peak, course, career or
-logical section tables. The current FE generator and metadata copy still
-contain Garibaldi-specific labels/template choices and must be extended
-alongside a new catalog entry.
+To add another course, register it in `tools/tricky_courses.py`, regenerate
+the Rust catalog and prepare its separate course/mode archives and UI rows.
+Extend the explicit surface table when a new source type appears. Do not
+enlarge or use out-of-range indices in official peak, course, career or
+logical section tables.
 
 ## References
 

@@ -599,6 +599,74 @@ pub(crate) mod table {
 /// `void *WorldBlockPool_AllocBlock(WorldBlockPool *pool)` (0x3a7768): pop a
 /// block off the free list at +0x10, mark it used and return it in v0.
 pub fn world_block_pool_alloc_block(c: &mut Cpu) {
+    // A heap call can yield. Returning to this entry with its own address
+    // in RA resumes the saved frame rather than claiming a second block.
+    if r32(c, RA) == 0x003a_7768 {
+        finish_lazy_block_alloc(c);
+        return;
+    }
+    let pool = abi::arg(c, 0);
+    let block = c.bus.read32(pool + 0x10);
+    if lazy_geometry_pool(c, pool) && c.bus.read32(block) == 0 {
+        guest(c, |c| {
+            save_lazy_block_frame(c);
+            c.g[S0][0] = c.g[A0][0];
+            c.g[S1][0] = c.lw(r32(c, S0) + 0x10);
+            c.g[A0][0] = c.lw(r32(c, S0));
+            c.g[A1][0] = 0x0049_4dd8;
+            c.g[A2][0] = 0x2500_0000;
+            c.g[A3][0] = 0;
+            call_ptr(c, 0x0031_7e30, 0x003a_7768)?;
+            finish_lazy_block_alloc(c);
+            Ok(())
+        });
+        return;
+    }
+    pop_world_block(c);
+}
+
+fn finish_lazy_block_alloc(c: &mut Cpu) {
+    c.sw(r32(c, S1), c.g[V0][0]);
+    restore_lazy_block_frame(c);
+    pop_world_block(c);
+}
+
+// The added heap calls must leave the leaf allocator's callers' scratch
+// registers intact as well as the callee-saved registers. Keep this frame
+// in game memory so a thread switch can resume it at either leaf entry.
+fn save_lazy_block_frame(c: &mut Cpu) {
+    let frame = Frame::open(c, 0x240);
+    for register in 1..32 {
+        if register != SP { frame.save(c, register, register as u32 * 16); }
+    }
+    for unit in 0..2 {
+        c.sd(sp(c) + 0x200 + unit as u32 * 16, c.lo[unit]);
+        c.sd(sp(c) + 0x208 + unit as u32 * 16, c.hi[unit]);
+    }
+}
+
+fn restore_lazy_block_frame(c: &mut Cpu) {
+    let frame = Frame { size: 0x240 };
+    for unit in 0..2 {
+        c.lo[unit] = c.ld(sp(c) + 0x200 + unit as u32 * 16);
+        c.hi[unit] = c.ld(sp(c) + 0x208 + unit as u32 * 16);
+    }
+    for register in 1..32 {
+        if register != SP { frame.restore(c, register, register as u32 * 16); }
+    }
+    frame.close(c);
+}
+
+// Converted Tricky worlds keep their full-resolution shared textures in
+// the named heap. Reserving all 53 geometry payloads at startup strands
+// megabytes in the pool (Alaska uses only 27), starving its final lightmaps.
+// Keep the native block count/packing; allocate only claimed payloads and
+// return them when their section is released, including across course swaps.
+fn lazy_geometry_pool(c: &mut Cpu, pool: u32) -> bool {
+    crate::custom_tracks::assets_available() && c.bus.read32(pool) == 0x20000
+}
+
+fn pop_world_block(c: &mut Cpu) {
     c.cycles += 10;
     let pool = Addr(abi::arg(c, 0));
     c.g[A1][0] = pool.off(0x10).lw(c);
@@ -620,6 +688,33 @@ pub fn world_block_pool_alloc_block(c: &mut Cpu) {
 /// (0x3a7790): push `block` onto the pool's free list at +0x10, recording the
 /// old head at block+0x14 and bumping the free count at pool+0x8.
 pub fn world_block_pool_free_block(c: &mut Cpu) {
+    if r32(c, RA) == 0x003a_7790 {
+        finish_lazy_block_free(c);
+        return;
+    }
+    let pool = abi::arg(c, 0);
+    let block = abi::arg(c, 1);
+    if lazy_geometry_pool(c, pool) && c.bus.read32(block) != 0 {
+        guest(c, |c| {
+            save_lazy_block_frame(c);
+            c.g[S1][0] = c.g[A1][0];
+            c.g[A0][0] = c.lw(r32(c, S1));
+            call_ptr(c, 0x0031_7e98, 0x003a_7790)?;
+            finish_lazy_block_free(c);
+            Ok(())
+        });
+        return;
+    }
+    push_world_block(c);
+}
+
+fn finish_lazy_block_free(c: &mut Cpu) {
+    c.sw(r32(c, S1), 0);
+    restore_lazy_block_frame(c);
+    push_world_block(c);
+}
+
+fn push_world_block(c: &mut Cpu) {
     c.cycles += 8;
     let pool = Addr(abi::arg(c, 0));
     let block = Addr(abi::arg(c, 1));
@@ -1908,7 +2003,11 @@ pub fn world_block_pool_init(c: &mut Cpu) {
                 c.g[S0][0] = c.lw((c.g[S1][0] as u32).wrapping_add(0xc));
                 c.g[A0][0] = c.lw(c.g[S1][0] as u32);
                 c.g[S0][0] = sx((c.g[S2][0] as u32).wrapping_add(c.g[S0][0] as u32));
-                call_ptr(c, 0x0031_7e30, 0x003a_7658)?;
+                if lazy_geometry_pool(c, r32(c, S1)) {
+                    c.g[V0][0] = 0;
+                } else {
+                    call_ptr(c, 0x0031_7e30, 0x003a_7658)?;
+                }
                 c.sw(c.g[S0][0] as u32, c.g[V0][0]);
                 c.g[V1][0] = c.lw((c.g[S1][0] as u32).wrapping_add(0x4));
                 c.g[A0][0] = c.lw((c.g[S1][0] as u32).wrapping_add(0xc));

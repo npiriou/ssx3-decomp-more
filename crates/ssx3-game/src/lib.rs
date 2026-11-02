@@ -82,6 +82,9 @@ pub mod custom_async_data;
 pub mod custom_event_menu_update;
 pub mod custom_menu_selection;
 pub mod custom_text_id;
+pub mod custom_camera_stream;
+pub mod custom_section_alloc;
+pub mod custom_text_id_string;
 #[cfg(feature = "camera")]
 pub mod camera;
 /// Debug-only overrides behind environment switches.
@@ -171,6 +174,9 @@ pub fn overrides() -> Vec<(u32, GuestFn, &'static str)> {
     v.extend_from_slice(custom_event_menu_update::OVERRIDES);
     v.extend_from_slice(custom_menu_selection::OVERRIDES);
     v.extend_from_slice(custom_text_id::OVERRIDES);
+    v.extend_from_slice(custom_camera_stream::OVERRIDES);
+    v.extend_from_slice(custom_section_alloc::OVERRIDES);
+    v.extend_from_slice(custom_text_id_string::OVERRIDES);
     v.extend_from_slice(custom_path_reader::OVERRIDES);
     v.extend_from_slice(custom_peak_widgets::OVERRIDES);
     v.extend_from_slice(custom_ui_objects::OVERRIDES);

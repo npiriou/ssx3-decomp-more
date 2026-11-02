@@ -5454,3 +5454,6 @@
 0x00202828    EventSelect_Update
 0x0039b960    UIMenu_SetSelection
 0x003a1000    UIText_SetTextId
+0x0015ec98    GameCamera_UpdateStreamView
+0x003a7878    SectionAllocator_Alloc
+0x003a0eb0    UIText_SetWideStringInternal

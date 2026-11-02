@@ -235,12 +235,14 @@ pub fn refresh_catalog_preview(c: &mut Cpu, this: u32, back: u32) -> Flow {
         }
     }
     let tab = c.bus.read32(gp.wrapping_sub(0xb50));
+    // PEAKno is the visible caption above the image. SubTitle is a
+    // separate instruction widget; changing it does not update this label.
     let subtitle = if mode != 2 {
         crate::game::hashvalue::str_hash(b"kT_BonusPeakName")
     } else if tab == 1 {
         crate::game::hashvalue::str_hash(b"kT_TrickyFreestyle")
     } else { 0x032d_0353 };
-    set_catalog_text(c, this, b"SubTitle", subtitle, back)?;
+    set_catalog_text(c, this, b"PEAKno", subtitle, back)?;
     c.g = saved;
     c.f = floats;
     c.pc = back;
@@ -275,9 +277,9 @@ fn sync_catalog_panels(c: &mut Cpu, this: u32, mode: u32, back: u32) -> Flow {
         }
     }
     set_catalog_text(c, this, b"title_title", hash(b"kT_BonusPeakName"), back)?;
-    let subtitle = if mode == 1 { hash(b"kT_FEHelpSelectMode") }
+    let subtitle = if mode == 1 { hash(b"kT_BonusPeakName") }
         else if tab == 1 { hash(b"kT_TrickyFreestyle") } else { 0x032d_0353 };
-    set_catalog_text(c, this, b"SubTitle", subtitle, back)?;
+    set_catalog_text(c, this, b"PEAKno", subtitle, back)?;
     Ok(())
 }
 
