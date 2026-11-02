@@ -175,6 +175,12 @@ pub fn event_select_set_map_tab_mode(c: &mut Cpu) {
 /// `void EventSelect_LoadMapImage(EventSelect *self)` (0x203990): request the
 /// selected event's map texture and latch which variant was loaded.
 pub fn event_select_load_map_image(c: &mut Cpu) {
+    if crate::custom_tracks::menu_preview().is_some() {
+        let this = c.g[A0][0] as u32;
+        let back = c.g[RA][0] as u32;
+        guest(c, |c| crate::bonus_menu_mode::load_catalog_preview(c, this, back));
+        return;
+    }
     guest(c, |c| {
         'b_203a44: {
             'b_203a40: {

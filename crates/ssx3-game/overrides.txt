@@ -5447,3 +5447,10 @@
 0x00367440    TexMan_LoadTexture
 0x00366e90    TexMan_CopyToTempTex
 0x002227d0    LunoVM_Execute
+0x00353b10    SkyBox_Render
+0x00233048    cGameLoadScreen_loadTexture
+0x00203d40    EventSelect_RefreshPeakList
+0x001a3cd8    cFEAsyncManager_LoadDataFile
+0x00202828    EventSelect_Update
+0x0039b960    UIMenu_SetSelection
+0x003a1000    UIText_SetTextId

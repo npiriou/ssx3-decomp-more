@@ -305,9 +305,7 @@ impl State {
         match &mut self.src {
             Source::Iso(disc) => open_iso(disc, &mut self.found, name),
             Source::Overlay { disc, dir } => {
-                let custom = if name.eq_ignore_ascii_case("DATA/WORLDS/BAM.BIG") {
-                    crate::custom_tracks::active_world_archive()
-                } else { None };
+                let custom = crate::custom_tracks::overlay_archive(name);
                 let requested = custom.as_deref().unwrap_or(name);
                 if let Some(path) = find_ci(dir, requested) {
                     let f = File::open(&path).ok()?;
@@ -325,9 +323,7 @@ impl State {
                 open_iso(disc, &mut self.found, name)
             }
             Source::Dir(root) => {
-                let custom = if name.eq_ignore_ascii_case("DATA/WORLDS/BAM.BIG") {
-                    crate::custom_tracks::active_world_archive()
-                } else { None };
+                let custom = crate::custom_tracks::overlay_archive(name);
                 let path = find_ci(root, custom.as_deref().unwrap_or(name))?;
                 let f = File::open(&path).ok()?;
                 let size = f.metadata().ok()?.len() as u32;

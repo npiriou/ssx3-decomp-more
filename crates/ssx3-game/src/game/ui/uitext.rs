@@ -891,6 +891,7 @@ pub fn ui_vector_ctor(c: &mut Cpu) {
 /// the widget up through `+0x5c/+0xd0/+0x10` and, when present, ask it for its
 /// wide string and set it, then re-wrap.
 pub fn cui_text_scroll_set_text_id(c: &mut Cpu) {
+    c.g[A1][0] = sx(crate::custom_tracks::menu_text_id(c.g[A1][0] as u32));
     guest(c, |c| {
         c.cycles += 11;
         c.g[SP][0] = sx(low(c, SP).wrapping_sub(0x20));

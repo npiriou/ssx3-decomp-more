@@ -1,4 +1,4 @@
-"""Add a Bonus row to SSX 3's Single Event peak list and locale.
+"""Add Peak Tricky and its Race/Freestyle lists to native Single Event.
 
 The modified files are derived from the user's SSX 3 ISO and belong only in
 the data overlay. No disc assets are stored in Git.
@@ -12,6 +12,7 @@ import struct
 
 from ssx3_world_build import encode_refpack_literals
 from tricky_assets import FormatError, decode_refpack, read_iso_file
+from tricky_courses import COURSES
 
 
 PEAK1 = 0x0056B7E1
@@ -77,9 +78,9 @@ def add_peak_to_screen(screen: bytes) -> bytes:
         raise FormatError("Event Select peak list differs from the USA disc")
     struct.pack_into("<H", peak_list, 2, 56)
     struct.pack_into("<I", peak_list, 32, 5)
-    # Preserve the three original menu indices; the original screen selects
-    # index 2 (Peak1) when it is created. Mountain is a separate heading.
-    peak_list[48:48] = struct.pack("<I", PEAK4)
+    # Peak Tricky is visually above Peak3. The native widget hook preserves
+    # retail child IDs independently of these UIMenu selection indices.
+    peak_list[36:36] = struct.pack("<I", PEAK4)
 
     second_header = bytearray(screen[second:second + 16])
     second_count = struct.unpack_from("<H", second_header, 14)[0]
@@ -92,44 +93,61 @@ def add_peak_to_screen(screen: bytes) -> bytes:
     if len(source) != 68 or struct.unpack_from("<H", source, 18)[0] != 50:
         raise FormatError("Peak1 layout differs from the USA disc")
     struct.pack_into("<I", bonus_property, 4, PEAK4)
-    struct.pack_into("<h", bonus_property, 18, 75)
+    struct.pack_into("<h", bonus_property, 18, -16)
+    struct.pack_into("<H", bonus_property, 42, 60)
+    struct.pack_into("<H", bonus_property, 46, 60)
     properties.insert(properties.index(source) + 1, bonus_property)
     peak_list_property = _row(properties, PEAK_LIST)
     if struct.unpack_from("<H", peak_list_property, 38)[0] != 120:
         raise FormatError("Event Select peak-list height differs from the USA disc")
     struct.pack_into("<H", peak_list_property, 38, 145)
 
-    # Separate native UIMenu objects keep the custom panels out of the
-    # original three-peak event arrays. Each contains exactly one item.
-    for old_root, new_root, new_child, text, parent_name in (
-            (str_hash("SPG_Peak1Goals"), BONUS_GOALS,
-             BONUS_RACE_ITEM, None, "SelectPeakGoal"),
-            (str_hash("Peak1RaceLocations"), BONUS_RACE,
-             GARIBALDI_ITEM, GARIBALDI_TEXT, "SelectEvent")):
+    # Separate UIMenus never index the fixed three-peak native event arrays.
+    panels = [(str_hash("SPG_Peak1Goals"), BONUS_GOALS,
+               [("BonusRace", 0x032d0353), ("BonusFreestyle", str_hash("kT_TrickyFreestyle"))],
+               "SelectPeakGoal")]
+    for mode in ("race", "freestyle"):
+        title = mode.title()
+        panels.append((str_hash("Peak1RaceLocations"), str_hash(f"Bonus{title}Locations"),
+                       [(f"Tricky{title}{i}", str_hash(f"kT_Tricky_{item.code}"))
+                        for i, item in enumerate(c for c in COURSES if mode in c.modes)], "SelectEvent"))
+    for old_root, new_root, children, parent_name in panels:
         root = _row(first, old_root)
         child_name = struct.unpack_from("<I", root, 36)[0]
-        child = bytearray(_row(first, child_name))
-        new_menu = bytearray(root[:36] + struct.pack("<I", new_child))
+        new_menu = bytearray(root[:36] + b"".join(struct.pack("<I", str_hash(name)) for name, _ in children))
         struct.pack_into("<H", new_menu, 2, len(new_menu))
         struct.pack_into("<I", new_menu, 4, new_root)
-        struct.pack_into("<I", new_menu, 32, 1)
-        struct.pack_into("<I", child, 4, new_child)
-        if text is not None:
+        struct.pack_into("<I", new_menu, 32, len(children))
+        new_children = []
+        for index, (name, text) in enumerate(children):
+            new_child = str_hash(name)
+            child = bytearray(_row(first, child_name))
+            struct.pack_into("<I", child, 4, new_child)
             struct.pack_into("<I", child, 36, text)
+            new_children.append(child)
+            layout = bytearray(_row(properties, child_name))
+            struct.pack_into("<I", layout, 4, new_child)
+            struct.pack_into("<h", layout, 18, index * 22)
+            # Long Tricky course names need a wider text box.
+            struct.pack_into("<H", layout, 34, 270)
+            if text == str_hash("kT_Tricky_MERQUER"):
+                struct.pack_into("<H", layout, 42, 50)
+                struct.pack_into("<H", layout, 46, 50)
+            properties.append(layout)
         # Containers drive native visibility and input. Create the new menu
         # before its container, then link it alongside the original menus.
         parent = _row(first, str_hash(parent_name))
         parent_index = first.index(parent)
-        first[parent_index:parent_index] = (child, new_menu)
+        first[parent_index:parent_index] = (*new_children, new_menu)
         if struct.unpack_from("<H", parent)[0] != 0x10:
             raise FormatError("Event Select panel container is not a UI group")
         parent[32] += 1
         parent.extend(struct.pack("<I", new_root))
         struct.pack_into("<H", parent, 2, len(parent))
-        for old_name, new_name in ((child_name, new_child), (old_root, new_root)):
-            layout = bytearray(_row(properties, old_name))
-            struct.pack_into("<I", layout, 4, new_name)
-            properties.append(layout)
+        layout = bytearray(_row(properties, old_root))
+        struct.pack_into("<I", layout, 4, new_root)
+        struct.pack_into("<H", layout, 38, max(120, len(children) * 22))
+        properties.append(layout)
 
     first_bytes = b"".join(first)
     properties_bytes = b"".join(properties)
@@ -151,7 +169,12 @@ def add_bonus_locale(data: bytes) -> bytes:
         raise FormatError("CMNAMER.LOC has no LOCL string table")
     entries = [struct.unpack_from("<II", data, pos)
                for pos in range(28, table_end, 8)]
-    additions = ((BONUS_TEXT, "Bonus"), (GARIBALDI_TEXT, "Garibaldi"))
+    additions = ((BONUS_TEXT, "Peak Tricky"), (GARIBALDI_TEXT, "Garibaldi"),
+                 (str_hash("kT_TrickyFreestyle"), "Freestyle"),
+                 *((str_hash(f"kT_Tricky_{item.code}"), item.name) for item in COURSES),
+                 *((str_hash(f"kT_TrickyHelp{mode.title()}_{item.code}"),
+                    f"Race on {item.name}." if mode == "race" else f"Score tricks on {item.name}.")
+                   for item in COURSES for mode in item.modes))
     if len(entries) != 1387 or any(key in (BONUS_TEXT, GARIBALDI_TEXT) for key, _ in entries):
         raise FormatError("CMNAMER.LOC differs from the USA disc")
     chunk = bytearray(data[table_end:])

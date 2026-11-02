@@ -2,6 +2,7 @@
 pub const TRACKS: &[CustomTrack] = &[
     CustomTrack {
         id: "garibaldi", name: "Garibaldi", peak_id: "tricky",
+        locale_key: "kT_Tricky_GARI",
         event: EventKind::Race,
         source: TrackSource::TrickyPs2 { archive: "DATA/MODELS/GARI.BIG" },
         world_location: "GARI",
@@ -9,6 +10,7 @@ pub const TRACKS: &[CustomTrack] = &[
     },
     CustomTrack {
         id: "garibaldi-freestyle", name: "Garibaldi", peak_id: "tricky",
+        locale_key: "kT_Tricky_GARI",
         event: EventKind::Freestyle,
         source: TrackSource::TrickyPs2 { archive: "DATA/MODELS/GARI.BIG" },
         world_location: "GARI",
@@ -16,6 +18,7 @@ pub const TRACKS: &[CustomTrack] = &[
     },
     CustomTrack {
         id: "snowdream", name: "Snowdream", peak_id: "tricky",
+        locale_key: "kT_Tricky_SNOW",
         event: EventKind::Race,
         source: TrackSource::TrickyPs2 { archive: "DATA/MODELS/SNOW.BIG" },
         world_location: "SNOW",
@@ -23,6 +26,7 @@ pub const TRACKS: &[CustomTrack] = &[
     },
     CustomTrack {
         id: "snowdream-freestyle", name: "Snowdream", peak_id: "tricky",
+        locale_key: "kT_Tricky_SNOW",
         event: EventKind::Freestyle,
         source: TrackSource::TrickyPs2 { archive: "DATA/MODELS/SNOW.BIG" },
         world_location: "SNOW",
@@ -30,6 +34,7 @@ pub const TRACKS: &[CustomTrack] = &[
     },
     CustomTrack {
         id: "elysium-alps", name: "Elysium Alps", peak_id: "tricky",
+        locale_key: "kT_Tricky_ELYSIUM",
         event: EventKind::Race,
         source: TrackSource::TrickyPs2 { archive: "DATA/MODELS/ELYSIUM.BIG" },
         world_location: "ELYSIUM",
@@ -37,6 +42,7 @@ pub const TRACKS: &[CustomTrack] = &[
     },
     CustomTrack {
         id: "elysium-alps-freestyle", name: "Elysium Alps", peak_id: "tricky",
+        locale_key: "kT_Tricky_ELYSIUM",
         event: EventKind::Freestyle,
         source: TrackSource::TrickyPs2 { archive: "DATA/MODELS/ELYSIUM.BIG" },
         world_location: "ELYSIUM",
@@ -44,6 +50,7 @@ pub const TRACKS: &[CustomTrack] = &[
     },
     CustomTrack {
         id: "mesablanca", name: "Mesablanca", peak_id: "tricky",
+        locale_key: "kT_Tricky_MESA",
         event: EventKind::Race,
         source: TrackSource::TrickyPs2 { archive: "DATA/MODELS/MESA.BIG" },
         world_location: "MESA",
@@ -51,6 +58,7 @@ pub const TRACKS: &[CustomTrack] = &[
     },
     CustomTrack {
         id: "mesablanca-freestyle", name: "Mesablanca", peak_id: "tricky",
+        locale_key: "kT_Tricky_MESA",
         event: EventKind::Freestyle,
         source: TrackSource::TrickyPs2 { archive: "DATA/MODELS/MESA.BIG" },
         world_location: "MESA",
@@ -58,6 +66,7 @@ pub const TRACKS: &[CustomTrack] = &[
     },
     CustomTrack {
         id: "merqury-city", name: "Merqury City Meltdown", peak_id: "tricky",
+        locale_key: "kT_Tricky_MERQUER",
         event: EventKind::Race,
         source: TrackSource::TrickyPs2 { archive: "DATA/MODELS/MERQUER.BIG" },
         world_location: "MERQUER",
@@ -65,6 +74,7 @@ pub const TRACKS: &[CustomTrack] = &[
     },
     CustomTrack {
         id: "merqury-city-freestyle", name: "Merqury City Meltdown", peak_id: "tricky",
+        locale_key: "kT_Tricky_MERQUER",
         event: EventKind::Freestyle,
         source: TrackSource::TrickyPs2 { archive: "DATA/MODELS/MERQUER.BIG" },
         world_location: "MERQUER",
@@ -72,6 +82,7 @@ pub const TRACKS: &[CustomTrack] = &[
     },
     CustomTrack {
         id: "tokyo-megaplex", name: "Tokyo Megaplex", peak_id: "tricky",
+        locale_key: "kT_Tricky_MEGAPLE",
         event: EventKind::Race,
         source: TrackSource::TrickyPs2 { archive: "DATA/MODELS/MEGAPLE.BIG" },
         world_location: "MEGAPLE",
@@ -79,6 +90,7 @@ pub const TRACKS: &[CustomTrack] = &[
     },
     CustomTrack {
         id: "tokyo-megaplex-freestyle", name: "Tokyo Megaplex", peak_id: "tricky",
+        locale_key: "kT_Tricky_MEGAPLE",
         event: EventKind::Freestyle,
         source: TrackSource::TrickyPs2 { archive: "DATA/MODELS/MEGAPLE.BIG" },
         world_location: "MEGAPLE",
@@ -86,6 +98,7 @@ pub const TRACKS: &[CustomTrack] = &[
     },
     CustomTrack {
         id: "aloha-ice-jam", name: "Aloha Ice Jam", peak_id: "tricky",
+        locale_key: "kT_Tricky_ALOHA",
         event: EventKind::Race,
         source: TrackSource::TrickyPs2 { archive: "DATA/MODELS/ALOHA.BIG" },
         world_location: "ALOHA",
@@ -93,6 +106,7 @@ pub const TRACKS: &[CustomTrack] = &[
     },
     CustomTrack {
         id: "aloha-ice-jam-freestyle", name: "Aloha Ice Jam", peak_id: "tricky",
+        locale_key: "kT_Tricky_ALOHA",
         event: EventKind::Freestyle,
         source: TrackSource::TrickyPs2 { archive: "DATA/MODELS/ALOHA.BIG" },
         world_location: "ALOHA",
@@ -100,6 +114,7 @@ pub const TRACKS: &[CustomTrack] = &[
     },
     CustomTrack {
         id: "alaska", name: "Alaska", peak_id: "tricky",
+        locale_key: "kT_Tricky_ALASKA",
         event: EventKind::Race,
         source: TrackSource::TrickyPs2 { archive: "DATA/MODELS/ALASKA.BIG" },
         world_location: "ALASKA",
@@ -107,6 +122,7 @@ pub const TRACKS: &[CustomTrack] = &[
     },
     CustomTrack {
         id: "alaska-freestyle", name: "Alaska", peak_id: "tricky",
+        locale_key: "kT_Tricky_ALASKA",
         event: EventKind::Freestyle,
         source: TrackSource::TrickyPs2 { archive: "DATA/MODELS/ALASKA.BIG" },
         world_location: "ALASKA",
@@ -114,6 +130,7 @@ pub const TRACKS: &[CustomTrack] = &[
     },
     CustomTrack {
         id: "untracked", name: "Untracked", peak_id: "tricky",
+        locale_key: "kT_Tricky_UNTRACK",
         event: EventKind::Race,
         source: TrackSource::TrickyPs2 { archive: "DATA/MODELS/UNTRACK.BIG" },
         world_location: "UNTRACK",
@@ -121,6 +138,7 @@ pub const TRACKS: &[CustomTrack] = &[
     },
     CustomTrack {
         id: "pipedream", name: "Pipedream", peak_id: "tricky",
+        locale_key: "kT_Tricky_PIPE",
         event: EventKind::Freestyle,
         source: TrackSource::TrickyPs2 { archive: "DATA/MODELS/PIPE.BIG" },
         world_location: "PIPE",
@@ -128,6 +146,7 @@ pub const TRACKS: &[CustomTrack] = &[
     },
     CustomTrack {
         id: "trick-tutorial", name: "Trick Tutorial", peak_id: "tricky",
+        locale_key: "kT_Tricky_TRICK",
         event: EventKind::Freestyle,
         source: TrackSource::TrickyPs2 { archive: "DATA/MODELS/TRICK.BIG" },
         world_location: "TRICK",

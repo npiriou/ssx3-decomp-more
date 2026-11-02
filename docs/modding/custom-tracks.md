@@ -1,69 +1,76 @@
 # Additional Single Event tracks
 
-This checkout implements a fourth native **Bonus** menu category and a
-Garibaldi Race importer. A manually played race has reached the native
-results with six classified riders (Zoe: 3:45). Automated tests and replay
-gates are stopped at the user's request; visual development uses the game.
+The native **Peak Tricky** catalog imports all eleven playable Tricky worlds.
+The eight main courses have Race and Freestyle scenery variants; Untracked
+uses Race, and Pipedream and the Trick Tutorial use Freestyle (19 entries).
+Automated tests and replay gates remain stopped at the user's request.
+Visual development uses the windowed native game.
 
 ## Prepare and start
 
 The importer requires the USA PS2 images: SSX 3 `SLUS_207.72` and SSX Tricky
-`SLUS_203.26`. No emulator installation is needed. On this machine:
+`SLUS_203.26`. On this machine:
 
 ```powershell
 cd X:\dev\ssx3-decomp-more
 $env:SSX3_ISO = 'X:\dev\ssx3\SSX 3 (USA).iso'
 $env:SSX_TRICKY_ISO = 'X:\dev\SSX Tricky (USA).iso'
-python tools/prepare_bonus_tracks.py
+python tools/prepare_tricky_tracks.py
 cargo run --profile game -p ssx3
 ```
 
-Select a character, then **Single Event -> Bonus -> Race -> Garibaldi**.
-The event uses the existing rules/confirmation and race loading flow.
-No special event command is required for the menu path.
+Select a character, then **Single Event -> Peak Tricky -> Race or Freestyle**.
+The course list uses the original Tricky names. `prepare_bonus_tracks.py`
+remains a compatibility entry point for the same preparer.
 
-`prepare_bonus_tracks.py` accepts `--ssx3-iso`, `--tricky-iso` and `--overlay`.
-Environment variables override its local ISO defaults. Missing files and
-incompatible disc serials stop conversion with an explicit error. It writes
-`DATA/WORLDS/BAM.BIG`, `DATA/UI/FE.LUI`, `DATA/LOCALE/CMNAMER.LOC` and a ready
-marker under `.cache/overlay`. The game discovers that folder automatically.
-`SSX3_DATA_OVERLAY_DIR` can select another prepared folder. Files absent from
-the overlay continue to come from the SSX 3 ISO. Without prepared assets, the
-game retains its original menu and events.
+The preparer accepts `--ssx3-iso`, `--tricky-iso`, `--overlay`, `--course`
+(repeatable), `--force`, `--worlds-only` and `--ui-only`. It derives one native
+BAM per course/mode in `DATA/WORLDS/TRICKY`, frontend lists/locales, the original
+Tricky course cards and logo, and an extended native MAPGFX archive. Per-world
+JSON files record the import inputs and resulting resources. Unchanged
+archives are retained. Missing or incompatible discs stop conversion.
 
-For direct development startup only:
+The game discovers `.cache/overlay/custom-tracks.ready` automatically.
+`SSX3_DATA_OVERLAY_DIR` selects another prepared folder; absent replacement
+files continue to come from the SSX 3 ISO. Without prepared assets, the game
+retains its original menu and events.
+
+For direct visual development, `SSX3_EVENT` accepts these source codes:
+`GARI`, `SNOW`, `ELYSIUM`, `MESA`, `MERQUER`, `MEGAPLE`, `ALOHA`, `ALASKA`,
+`UNTRACK`, `PIPE`, `TRICK`. Add `:freestyle` or `:race` to select a mode;
+the first catalog mode is the default. Example:
 
 ```powershell
-$env:SSX3_EVENT = 'GARI'
+$env:SSX3_EVENT = 'ELYSIUM:freestyle'
 cargo run --profile game -p ssx3
 Remove-Item Env:SSX3_EVENT
 ```
 
 All derived resources stay ignored under `.cache/`. Neither ISO nor extracted
-EA assets belong in Git. The project-root SSX 3 image in this checkout is a
-hard link to the image under `X:\dev\ssx3`.
+EA assets belong in Git. The project-root SSX 3 image is a hard link to the
+image under `X:\dev\ssx3`.
 
 ## Runtime architecture
 
 `crates/ssx3-game/src/custom_tracks.rs` owns stable peak/course string IDs,
 source metadata and the active custom event. Custom IDs never index the
 original 17-entry TrackInfo or career tables. A separate 100-byte TrackInfo
-copy supplies the Garibaldi display name while retaining bounded native race
+copy supplies the selected course display name while retaining bounded native race
 setup fields. SSX 3 remains responsible for riders, physics, tricks, controls,
 HUD, camera, countdown, progression, respawn and results.
 
 The native UI additions live in the derived FE.LUI and locale file:
 
-- A Bonus widget extends the existing peak list without changing the original
-  three peak indices or their native default selection.
-- Separate one-item native lists contain Race and Garibaldi. Their callbacks,
-  focus, text and visibility use the existing UI methods. They belong to the
-  native `SelectPeakGoal` and `SelectEvent` containers, and their text is
-  refreshed after the native panel pass. One accept press advances one menu
-  step, even when the new list occurs later in the same input traversal.
-- Custom selection bypasses career locks. Native peak indices stay within
-  their original bounds. The category is available in Single Event front-end
-  flows, outside Conquer the Mountain progression.
+- Peak Tricky appears above Peak 3. Host course IDs and retail UIObject IDs
+  remain separate from UIMenu child selection indices.
+- Separate native menus contain Race/Freestyle and their course lists. Custom
+  rows do not index the fixed native three-peak event arrays. Each selection
+  resolves a valid native template event (ARA1 or ASS1) for rules and scoring.
+- Custom selection bypasses career locks and remains outside career progress.
+- Original Tricky course cards come from `PS2LOAD.BIG`. The Peak Tricky logo
+  is extracted from the `loa2` loading atlas. The native MAPGFX archive keeps
+  its retail entries and adds the custom cards. Loading screens receive the
+  selected original course card under the native template's SSH filename.
 
 `bonus_menu_mode.rs`, `custom_peak_widgets.rs`, `custom_ui_objects.rs` and
 `custom_ui_screen.rs` implement the corresponding native UI functions;
@@ -75,16 +82,20 @@ padding. Literal RefPack data is split to fit that compressed read size, and
 each appended stream begins at a 32 KiB boundary. Larger compressed blocks
 overrun the native reader and corrupt models during loading.
 
-The derived BAM appends a world location named `GARI` and preserves the
-original locations and stream bytes. Its world index is 49. SectionMan has
-50 logical slots and uses logical slot 49 as a queue sentinel, so the custom
-course leases the template event's existing logical slot instead of extending
-that table. `SectionMan_Init` resolves GARI from the loaded database and
-updates that temporary mapping. The template residency row temporarily holds
-only GARI plus the native sky and shared transport assets; Snow Jam's terrain
-connectors and scripts are excluded. Selecting an original peak restores the
-original mapping and residency row. Course terrain handles, section bytes
-and hull references identify the appended world, not the template section.
+Each derived BAM appends one world location at physical section 49. Keeping
+one archive per course/mode avoids growing the fixed SectionMan arrays or
+accumulating every course's textures. SectionMan has 50 logical slots and
+uses logical slot 49 as a queue sentinel; the selected course leases the
+existing template event's logical slot. The native file layer selects the
+course archive whenever the game opens its normal BAM path. It reserves the
+maximum shared texture range across prepared archives before FX initialize.
+
+Each archive also replaces ASKY's model, instance, materials and textures with
+that course's original Tricky sky dome, centered through the native SkyBox
+path. Original course lightmaps and instance lighting retain their source
+colors. Original non-sky section bytes and IDs are preserved. The template's
+terrain connectors are excluded from custom residency; returning to a retail
+peak restores the leased map slot and residency row.
 
 The original event supplies a bounded race setup, not an official record ID
 for custom results. `custom_results.rs` retains the native result snapshot

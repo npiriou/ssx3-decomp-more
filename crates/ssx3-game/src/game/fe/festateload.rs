@@ -435,6 +435,10 @@ pub fn cfe_state_event_select_update(c: &mut Cpu) {
         call_ptr(c, callee::UI_STATE_V13, 0x0018_69ec)?;
         c.g[A0][0] = sx(at(c.g[S0][0] as u32, 0x48));
         call_ptr(c, callee::EVENT_SELECT_ON_UPDATE, 0x0018_69f4)?;
+        if crate::custom_tracks::menu_preview().is_some() {
+            let widget = (c.g[S0][0] as u32).wrapping_add(0x48);
+            crate::bonus_menu_mode::refresh_catalog_preview(c, widget, 0x0018_69f4)?;
+        }
         frame.restore(c, S0, 0x10);
         frame.restore_ra(c, 0);
         frame.close(c);

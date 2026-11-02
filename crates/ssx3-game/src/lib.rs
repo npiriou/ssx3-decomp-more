@@ -75,6 +75,13 @@ pub mod custom_fx_texture_load;
 pub mod custom_texture_load;
 pub mod custom_temp_texture;
 pub mod custom_luno_execute;
+pub mod custom_sky_render;
+pub mod custom_loading_texture;
+pub mod custom_peak_refresh;
+pub mod custom_async_data;
+pub mod custom_event_menu_update;
+pub mod custom_menu_selection;
+pub mod custom_text_id;
 #[cfg(feature = "camera")]
 pub mod camera;
 /// Debug-only overrides behind environment switches.
@@ -157,6 +164,13 @@ pub fn overrides() -> Vec<(u32, GuestFn, &'static str)> {
     let mut v: Vec<(u32, GuestFn, &'static str)> = CORE.to_vec();
     v.extend(game::overrides());
     v.extend_from_slice(bonus_menu_mode::OVERRIDES);
+    v.extend_from_slice(custom_sky_render::OVERRIDES);
+    v.extend_from_slice(custom_loading_texture::OVERRIDES);
+    v.extend_from_slice(custom_peak_refresh::OVERRIDES);
+    v.extend_from_slice(custom_async_data::OVERRIDES);
+    v.extend_from_slice(custom_event_menu_update::OVERRIDES);
+    v.extend_from_slice(custom_menu_selection::OVERRIDES);
+    v.extend_from_slice(custom_text_id::OVERRIDES);
     v.extend_from_slice(custom_path_reader::OVERRIDES);
     v.extend_from_slice(custom_peak_widgets::OVERRIDES);
     v.extend_from_slice(custom_ui_objects::OVERRIDES);

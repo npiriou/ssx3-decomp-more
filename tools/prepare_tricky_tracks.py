@@ -1,0 +1,70 @@
+"""Prepare every Tricky course from the two local PS2 discs.
+
+Derived game resources stay in the ignored overlay; no disc data enters Git.
+"""
+
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+import os
+from pathlib import Path
+
+from build_tricky_world import build
+from tricky_courses import COURSES
+
+
+def main() -> None:
+    root = Path(__file__).resolve().parent.parent
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--ssx3-iso", type=Path,
+                        default=Path(os.environ.get("SSX3_ISO", root / "SSX 3 (USA).iso")))
+    parser.add_argument("--tricky-iso", type=Path,
+                        default=Path(os.environ.get("SSX_TRICKY_ISO", root.parent / "SSX Tricky (USA).iso")))
+    parser.add_argument("--overlay", type=Path, default=root / ".cache/overlay")
+    parser.add_argument("--course", action="append", help="Course ID or disc code; all by default")
+    parser.add_argument("--force", action="store_true")
+    parser.add_argument("--worlds-only", action="store_true")
+    parser.add_argument("--ui-only", action="store_true")
+    args = parser.parse_args()
+    sources = sorted(Path(__file__).parent.glob("ssx3_*.py")) + sorted(Path(__file__).parent.glob("tricky_*.py"))
+    sources += [Path(__file__).with_name("build_tricky_world.py")]
+    fingerprint = hashlib.sha256(b"".join(p.name.encode() + p.read_bytes() for p in sources)).hexdigest()
+    results = []
+    for selected in COURSES:
+        if args.course and not any(value.lower() in (selected.id, selected.code.lower()) for value in args.course):
+            continue
+        for mode in selected.modes:
+            output = args.overlay / f"DATA/WORLDS/TRICKY/{selected.code}-{mode}.BIG"
+            manifest = output.with_suffix(".json")
+            previous = json.loads(manifest.read_text()) if manifest.exists() else {}
+            if args.ui_only and not (output.exists() and previous):
+                raise ValueError(f"course archive is not prepared: {output}")
+            if args.ui_only or (not args.force and output.exists() and previous.get("importer") == fingerprint):
+                report = previous["world"]
+                print(f"Retained {selected.name} / {mode}", flush=True)
+            else:
+                print(f"Importing {selected.name} / {mode}", flush=True)
+                report = build(args.ssx3_iso, args.tricky_iso, output, selected=selected, mode=mode)
+                manifest.write_text(json.dumps({"importer": fingerprint, "world": report}, indent=2), encoding="utf-8")
+                print(f"  {report['archive_bytes']} bytes; {report['world_texture_slots']} texture slots; original Tricky sky", flush=True)
+            results.append({"course": selected.id, "mode": mode, "archive": str(output),
+                            "texture_slots": report["world_texture_slots"]})
+    if not args.worlds_only:
+        from tricky_ui_assets import prepare
+        prepare(args.tricky_iso, args.overlay, args.ssx3_iso)
+        from ssx3_bonus_menu import add_bonus_locale, add_bonus_screen
+        from tricky_assets import read_iso_file
+        for name, convert in (("DATA/UI/FE.LUI", add_bonus_screen),
+                              ("DATA/LOCALE/CMNAMER.LOC", add_bonus_locale)):
+            target = args.overlay / name
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(convert(read_iso_file(args.ssx3_iso, name)))
+        (args.overlay / "custom-tracks.ready").write_text(
+            json.dumps({"version": 2, "tracks": results}, indent=2), encoding="utf-8")
+    print(f"Prepared {len(results)} course/mode archives", flush=True)
+
+
+if __name__ == "__main__":
+    main()

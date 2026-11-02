@@ -33,8 +33,19 @@ pub fn event_select_on_widget_created(c: &mut Cpu) {
             let hash = crate::game::hashvalue::str_hash;
             if name == hash(b"Peak4") {
                 c.bus.write32(widget + 0x18, 3);
-            } else if name == hash(b"BonusRace") || name == hash(b"BonusGaribaldi") {
+            } else if name == hash(b"BonusRace") {
                 c.bus.write32(widget + 0x18, 0);
+            } else if name == hash(b"BonusFreestyle") {
+                c.bus.write32(widget + 0x18, 1);
+            } else {
+                for tab in 0..2 {
+                    for (index, _) in crate::custom_tracks::menu_tracks(tab).enumerate() {
+                        let kind = if tab == 0 { "Race" } else { "Freestyle" };
+                        if name == hash(format!("Tricky{kind}{index}").as_bytes()) {
+                            c.bus.write32(widget + 0x18, index as u32);
+                        }
+                    }
+                }
             }
         }
     }
@@ -65,7 +76,7 @@ pub fn event_select_on_widget_created(c: &mut Cpu) {
             c.g[A0][0] = c.g[S1][0];
             if front_end {
                 c.cycles += 4;
-                c.g[A1][0] = 2;
+                c.g[A1][0] = if crate::custom_tracks::assets_available() { 3 } else { 2 };
                 call_ptr(c, UI_MENU_SET_SELECTION, 0x0020_0a2c)?;
                 frame.restore(c, S0, 0x30);
             } else {
@@ -77,6 +88,7 @@ pub fn event_select_on_widget_created(c: &mut Cpu) {
                 c.g[A0][0] = c.g[S1][0];
                 c.g[A1][0] = sx((c.g[A1][0] as u32).wrapping_sub(c.g[V1][0] as u32));
                 c.g[A1][0] &= 0xff;
+                if crate::custom_tracks::assets_available() { c.g[A1][0] += 1; }
                 call_ptr(c, UI_MENU_SET_SELECTION, 0x0020_0a54)?;
                 frame.restore(c, S0, 0x30);
             }

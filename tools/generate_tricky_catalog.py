@@ -17,6 +17,7 @@ def generate(output: Path) -> None:
             q = json.dumps
             rows.append(f'''    CustomTrack {{
         id: {q(identifier)}, name: {q(course.name)}, peak_id: "tricky",
+        locale_key: "kT_Tricky_{course.code}",
         event: EventKind::{event},
         source: TrackSource::TrickyPs2 {{ archive: {q(course.archive)} }},
         world_location: {q(course.code)},

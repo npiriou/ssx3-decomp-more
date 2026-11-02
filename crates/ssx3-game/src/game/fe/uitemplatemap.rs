@@ -1097,6 +1097,22 @@ fn es_commit_race(c: &mut Cpu, fn_reg: usize, ret: u32) -> Flow {
 /// peak, a tab or an event, or confirm a challenge), 6 goes back, 7
 /// toggles the map tab. Returns 1 when the screen is left, else 0.
 pub fn event_select_on_widget_action(c: &mut Cpu) {
+    if crate::custom_tracks::assets_available() {
+        let widget = c.g[A1][0] as u32;
+        let name = c.bus.read32(widget + 0x38);
+        if let Some(id) = crate::custom_tracks::widget_row_id(name) {
+            c.bus.write32(widget + 0x18, id);
+        }
+    }
+    if std::env::var_os("SSX3_CUSTOM_MENU_LOG").is_some() && c.g[A2][0] != 2 {
+        let widget = c.g[A1][0] as u32;
+        let action = c.g[A2][0];
+        let gp = c.g[GP][0] as u32;
+        let mode = c.bus.read32(gp.wrapping_sub(0xb54));
+        let id = c.bus.read32(widget + 0x18);
+        let name = c.bus.read32(widget + 0x38);
+        eprintln!("[tricky-menu] mode={mode} action={action} widget={widget:#x} name={name:#x} id={id} preview={:?}", crate::custom_tracks::menu_preview());
+    }
     guest(c, |c| {
         c.cycles += 27;
         let frame = Frame::open(c, 0xe0);
@@ -1240,11 +1256,7 @@ fn es_show_mode(c: &mut Cpu) -> Next {
     let this = c.g[S2][0] as u32;
     crate::bonus_menu_mode::refresh_catalog_panels(c, this, mode, 0x0020_23c4)?;
     c.g[A0][0] = c.g[S2][0];
-    if crate::custom_tracks::bonus_peak_selected() {
-        action::HIDE_MAP_PIC.call(c, 0x0020_23cc)?;
-    } else {
-        action::LOAD_MAP_IMAGE.call(c, 0x0020_23cc)?;
-    }
+    action::LOAD_MAP_IMAGE.call(c, 0x0020_23cc)?;
     c.g[V0][0] = 0;
     Ok(Exit::Value)
 }
@@ -1349,11 +1361,24 @@ fn es_custom_row(c: &mut Cpu, w: u32) -> bool {
 /// Action 1: colour the row as highlighted (with the confirm popup up, its
 /// yes/no buttons follow the row).
 fn es_highlight(c: &mut Cpu, this: u32, w: u32) -> Next {
+    if crate::custom_tracks::assets_available() && es_global(c, es::FLOW).lw(c) < 2 {
+        let mode = es_global(c, es::MODE).lw(c);
+        if es_custom_row(c, w) {
+            if mode == 2 {
+                let tab = es_global(c, es::TAB).lw(c) as u32;
+                let row = c.bus.read32(w + 0x18) as usize;
+                if let Some(track) = crate::custom_tracks::menu_tracks(tab).nth(row) {
+                    crate::custom_tracks::preview_track(track);
+                }
+            } else { crate::custom_tracks::preview_logo(); }
+        } else if mode == 0 { crate::custom_tracks::clear_preview(); }
+    }
     if es_custom_row(c, w) {
         c.g[A0][0] = sx(this);
         c.g[A1][0] = sx(w);
         c.g[A2][0] = 1;
         action::SET_HIGHLIGHT_COLOR.call(c, 0x0020_2510)?;
+        crate::bonus_menu_mode::load_catalog_preview(c, this, 0x0020_2510)?;
         let mode = es_global(c, es::MODE).lw(c);
         if mode == 1 || mode == 2 {
             c.g[A0][0] = sx(if mode == 1 { 0x004a_25f8 } else { 0x004a_2600 });
@@ -1853,11 +1878,12 @@ fn es_accept_tab(c: &mut Cpu, this: u32, w: u32) -> Next {
         && es_global(c, es::FLOW).lw(c) < 2
     {
         if !crate::custom_tracks::accept_menu_step(c) { return Ok(Exit::Zero); }
-        if Addr(w.wrapping_add(0x18)).lw(c) != 0 {
+        let tab = Addr(w.wrapping_add(0x18)).lw(c);
+        if tab > 1 {
             return es_deny(c, 0x0020_1d78);
         }
         es_sound(c, 6, false, 0x0020_1d44)?;
-        es_global(c, es::TAB).sw(c, 0);
+        es_global(c, es::TAB).sw(c, tab);
         c.g[A0][0] = sx(this);
         c.g[A1][0] = 2;
         action::SET_MODE.call(c, 0x0020_1d58)?;
@@ -1888,13 +1914,14 @@ fn es_accept_event(c: &mut Cpu, this: u32, w: u32) -> Next {
         && es_global(c, es::FLOW).lw(c) < 2
     {
         if !crate::custom_tracks::accept_menu_step(c) { return Ok(Exit::Zero); }
-        if Addr(w.wrapping_add(0x18)).lw(c) != 0 {
+        let row = Addr(w.wrapping_add(0x18)).lw(c) as usize;
+        let tab = es_global(c, es::TAB).lw(c) as u32;
+        let Some(track) = crate::custom_tracks::menu_tracks(tab).nth(row) else {
             return es_deny(c, 0x0020_1d78);
-        }
-        crate::custom_tracks::activate("garibaldi");
+        };
+        crate::custom_tracks::activate_in_game(c, track.id);
         crate::custom_tracks::prepare_track_info(c, 0x0020_1dcc)?;
         es_global(c, es::PEAK).sw(c, 0);
-        es_global(c, es::TAB).sw(c, 0);
         c.g[V0][0] = es_global(c, es::WORLD).lw(c);
         return es_start_event(c, w);
     }
@@ -1938,7 +1965,19 @@ fn es_start_event(c: &mut Cpu, w: u32) -> Next {
     c.g[A0][0] = c.g[SP][0];
     c.g[A3][0] = es_global(c, es::TAB).lw(c);
     c.g[A1][0] = es_global(c, es::PEAK).lw(c);
-    action::GET_EVENT_RECORD.call(c, 0x0020_1e10)?;
+    if let Some(track) = crate::custom_tracks::active() {
+        // Custom rows may exceed the retail event array. Resolve a bounded
+        // native template directly, retaining its mode, rules and scoring.
+        let events = crate::event_boot::events(c);
+        let template = crate::event_boot::find(&events, track.template_event)
+            .expect("native template event is absent");
+        let record = sp(c);
+        c.bus.write32(record, template.track);
+        c.bus.write32(record + 4, template.kind);
+        c.bus.write32(record + 8, template.event);
+    } else {
+        action::GET_EVENT_RECORD.call(c, 0x0020_1e10)?;
+    }
     let record = sp(c);
     c.g[V1][0] = Addr(record).lw(c);
     c.g[V0][0] = 0x0053_0000;

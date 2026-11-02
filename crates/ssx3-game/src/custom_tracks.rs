@@ -35,6 +35,7 @@ pub struct CustomTrack {
     pub id: &'static str,
     pub name: &'static str,
     pub peak_id: &'static str,
+    pub locale_key: &'static str,
     pub event: EventKind,
     pub source: TrackSource,
     /// Name of the appended location in the derived BAM archive.
@@ -52,6 +53,28 @@ pub const PEAKS: &[CustomPeak] = &[CustomPeak {
 
 include!("tricky_catalog.rs");
 
+pub fn menu_tracks(tab: u32) -> impl Iterator<Item = &'static CustomTrack> {
+    let kind = if tab == 1 { EventKind::Freestyle } else { EventKind::Race };
+    TRACKS.iter().filter(move |track| track.event == kind)
+}
+
+/// UIMenu initialization can assign its own child IDs after widget creation.
+/// Restore the bounded retail IDs and the host catalog's row IDs at dispatch.
+pub fn widget_row_id(name: u32) -> Option<u32> {
+    let hash = crate::game::hashvalue::str_hash;
+    for (label, id) in [(b"Peak4".as_slice(), 3),
+                       (b"BonusRace", 0), (b"BonusFreestyle", 1)] {
+        if name == hash(label) { return Some(id); }
+    }
+    for tab in 0..2 {
+        let kind = if tab == 1 { "Freestyle" } else { "Race" };
+        for (index, _) in menu_tracks(tab).enumerate() {
+            if name == hash(format!("Tricky{kind}{index}").as_bytes()) { return Some(index as u32); }
+        }
+    }
+    None
+}
+
 // Zero means that the game follows only the original event/section tables.
 // The stored index is one-based so later custom courses need no new flag.
 static ACTIVE: AtomicUsize = AtomicUsize::new(0);
@@ -65,6 +88,35 @@ static ASSETS_AVAILABLE: AtomicBool = AtomicBool::new(false);
 static WORLD_TEXTURE_SLOTS: AtomicU32 = AtomicU32::new(1500);
 static TRACK_INFO: AtomicU32 = AtomicU32::new(0);
 static MENU_ACTION_FRAME: AtomicU32 = AtomicU32::new(u32::MAX);
+static MENU_PREVIEW: AtomicUsize = AtomicUsize::new(0);
+
+pub fn preview_logo() { MENU_PREVIEW.store(1, Ordering::Release); }
+pub fn clear_preview() { MENU_PREVIEW.store(0, Ordering::Release); }
+pub fn preview_track(track: &'static CustomTrack) {
+    let index = TRACKS.iter().position(|item| item.id == track.id).unwrap();
+    MENU_PREVIEW.store(index + 2, Ordering::Release);
+}
+pub fn menu_preview() -> Option<(u32, String)> {
+    let index = MENU_PREVIEW.load(Ordering::Acquire);
+    if index == 0 { return None; }
+    let image = if index == 1 { "logo" } else { TRACKS[index - 2].world_location };
+    Some((0x100 + index as u32, format!("|tricky_{}.ssh", image.to_ascii_lowercase())))
+}
+
+pub fn preview_course() -> Option<&'static CustomTrack> {
+    MENU_PREVIEW.load(Ordering::Acquire).checked_sub(2).and_then(|index| TRACKS.get(index))
+}
+
+pub fn menu_text_id(original: u32) -> u32 {
+    // Retail help descriptions belong to the template event, not the
+    // imported course. Remap only those two locale IDs while browsing it.
+    if !bonus_peak_selected() || !matches!(original, 0x0af5_21c1 | 0x0af5_2fe1) {
+        return original;
+    }
+    let Some(track) = preview_course() else { return original; };
+    let mode = if track.event == EventKind::Race { "Race" } else { "Freestyle" };
+    crate::game::hashvalue::str_hash(format!("kT_TrickyHelp{mode}_{}", track.world_location).as_bytes())
+}
 // The template's native loading code consumes one fixed 40-byte residency
 // row. Lease it while the custom event is active and restore it on return.
 // Its sky and shared transport assets remain native; its terrain connectors
@@ -116,6 +168,14 @@ pub fn active_world_archive() -> Option<String> {
     let track = active()?;
     let mode = if track.event == EventKind::Race { "race" } else { "freestyle" };
     Some(format!("DATA/WORLDS/TRICKY/{}-{mode}.BIG", track.world_location))
+}
+
+pub fn overlay_archive(name: &str) -> Option<String> {
+    if name.eq_ignore_ascii_case("DATA/WORLDS/BAM.BIG") {
+        active_world_archive()
+    } else if name.eq_ignore_ascii_case("DATA/UI/COURSPIC.BIG") {
+        Some(format!("DATA/UI/TRICKY/{}.BIG", active()?.world_location))
+    } else { None }
 }
 
 pub fn activate_code(value: &str) -> Option<&'static CustomTrack> {
@@ -190,6 +250,17 @@ pub fn activate(id: &str) -> Option<&'static CustomTrack> {
     TEMPLATE_WORLD_SECTION.store(u32::MAX, Ordering::Release);
     ACTIVE.store(index + 1, Ordering::Release);
     TRACKS.get(index)
+}
+
+pub fn activate_in_game(c: &mut Cpu, id: &str) -> Option<&'static CustomTrack> {
+    track(id)?;
+    if active().is_some_and(|old| old.id != id) {
+        // Returning between courses may change both the native template
+        // and its residency row. Release the previous lease first.
+        deactivate(c);
+        select_bonus_peak();
+    }
+    activate(id)
 }
 
 /// Restore the original event-to-world mapping on return to Single Event.

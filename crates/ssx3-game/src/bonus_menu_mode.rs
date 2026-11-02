@@ -154,54 +154,130 @@ fn catalog_panel(c: &mut Cpu, this: u32, name: &[u8], visible: bool, back: u32) 
         c.g[A1][0] = visible as u64;
         call_ptr(c, target, back)?;
     }
-    if visible {
-        c.g[A0][0] = sx(object);
-        c.g[A1][0] = 0;
-        call_ptr(c, 0x0039_b960, back)?;
+    Ok(())
+}
+
+fn set_catalog_text(c: &mut Cpu, this: u32, name: &[u8], text: u32, back: u32) -> Flow {
+    let row = catalog_object(c, this, name, back)?;
+    if row != 0 {
+        if c.bus.read32(row + 0xb0) == text && c.bus.read32(row + 0xb4) != 0 {
+            return Ok(());
+        }
+        c.g[A0][0] = sx(row);
+        c.g[A1][0] = sx(text);
+        call_ptr(c, SET_TEXT_ID, back)?;
+        c.g[A0][0] = sx(row);
+        call_ptr(c, 0x003a_0528, back)?;
     }
     Ok(())
 }
 
-fn sync_catalog_panels(c: &mut Cpu, this: u32, mode: u32, back: u32) -> Flow {
-    catalog_panel(c, this, b"SPG_BonusGoals", false, back)?;
-    catalog_panel(c, this, b"BonusRaceLocations", false, back)?;
-    let gp = c.g[GP][0] as u32;
-    if !crate::custom_tracks::bonus_peak_selected()
-        || c.bus.read32(gp.wrapping_sub(0xb5c)) >= 2
-        || c.bus.read32(this.wrapping_add(CONFIRM)) != 0
-    {
+/// Request an original Tricky card through the native asynchronous image
+/// slot. Added MAPGFX members avoid the three-entry retail peak table.
+pub fn load_catalog_preview(c: &mut Cpu, this: u32, back: u32) -> Flow {
+    let Some((variant, path)) = crate::custom_tracks::menu_preview() else {
+        c.pc = back;
+        return Ok(());
+    };
+    if c.bus.read32(this + 0x2d4) == variant {
+        c.bus.write32(this + 0x2f0, 0);
+        c.pc = back;
         return Ok(());
     }
-    let (original, custom, title): (&[u8], &[u8], &[u8]) = match mode {
-        1 => (b"SPG_Peak1Goals", b"SPG_BonusGoals", b"kT_BonusPeakName"),
-        2 => (b"Peak1RaceLocations", b"BonusRaceLocations", b"kT_CustomGaribaldiName"),
-        _ => return Ok(()),
-    };
-    catalog_panel(c, this, original, false, back)?;
-    catalog_panel(c, this, custom, true, back)?;
-    let (child, text): (&[u8], u32) = if mode == 1 {
-        (b"BonusRace", 0x032d_0353) // Native "Race" locale entry.
-    } else {
-        (b"BonusGaribaldi", crate::game::hashvalue::str_hash(b"kT_CustomGaribaldiName"))
-    };
-    let row = catalog_object(c, this, child, back)?;
-    if row != 0 {
-        c.g[A0][0] = sx(row);
-        c.g[A1][0] = sx(text);
-        call_ptr(c, SET_TEXT_ID, back)?;
-        // These rows are absent from the native event-name refresh arrays.
-        // Resolve their text after the screen's locale/font owner is ready.
-        c.g[A0][0] = sx(row);
-        call_ptr(c, 0x003a_0528, back)?;
+    let saved = c.g;
+    let floats = c.f;
+    let gp = c.g[GP][0] as u32;
+    let world = c.bus.read32(gp.wrapping_sub(0x848));
+    let manager = c.bus.read32(world + 0x11c);
+    let slot = c.bus.read32(this + 0x2d8);
+    c.g[A0][0] = sx(manager);
+    c.g[A1][0] = sx(slot);
+    call_ptr(c, 0x001a_38c0, back)?;
+    c.g[A0][0] = sx(manager);
+    c.g[A1][0] = 0;
+    c.g[A2][0] = sx(slot);
+    c.g[A3][0] = 1;
+    call_ptr(c, 0x001a_3768, back)?;
+    let request = manager + slot * 0x11c;
+    for (index, byte) in path.bytes().chain(std::iter::once(0)).enumerate() {
+        c.bus.write8(request + index as u32, byte);
     }
-    for name in [b"title_title".as_slice(), b"SubTitle".as_slice()] {
-        let title_object = catalog_object(c, this, name, back)?;
-        if title_object != 0 {
-            c.g[A0][0] = sx(title_object);
-            c.g[A1][0] = sx(crate::game::hashvalue::str_hash(title));
-            call_ptr(c, SET_TEXT_ID, back)?;
+    c.bus.write32(this + 0x2d4, variant);
+    c.bus.write32(this + 0x2dc, 0);
+    c.bus.write32(this + 0x2f0, 0);
+    c.g = saved;
+    c.f = floats;
+    c.pc = back;
+    Ok(())
+}
+
+pub fn refresh_catalog_preview(c: &mut Cpu, this: u32, back: u32) -> Flow {
+    if crate::custom_tracks::menu_preview().is_none() { return Ok(()); }
+    let saved = c.g;
+    let floats = c.f;
+    for name in [b"SP_Info".as_slice(), b"SP_GameInfo".as_slice(), b"SE_Info".as_slice()] {
+        catalog_panel(c, this, name, false, back)?;
+    }
+    for name in [b"Indicators".as_slice(), b"peak1outline".as_slice(),
+                 b"peak2outline".as_slice(), b"peak3outline   ".as_slice()] {
+        catalog_panel(c, this, name, false, back)?;
+    }
+    let gp = c.g[GP][0] as u32;
+    let mode = c.bus.read32(gp.wrapping_sub(0xb54));
+    if mode == 0 {
+        let row = catalog_object(c, this, b"Peak4", back)?;
+        let highlight = catalog_object(c, this, b"phl", back)?;
+        if row != 0 && highlight != 0 {
+            let y = f32::from_bits(c.bus.read32(row + 0x48)) + 100.0;
+            c.bus.write32(highlight + 0x48, y.to_bits());
+            let flags = c.bus.read32(highlight + 0x14);
+            c.bus.write32(highlight + 0x14, flags | 1);
         }
     }
+    let tab = c.bus.read32(gp.wrapping_sub(0xb50));
+    let subtitle = if mode != 2 {
+        crate::game::hashvalue::str_hash(b"kT_BonusPeakName")
+    } else if tab == 1 {
+        crate::game::hashvalue::str_hash(b"kT_TrickyFreestyle")
+    } else { 0x032d_0353 };
+    set_catalog_text(c, this, b"SubTitle", subtitle, back)?;
+    c.g = saved;
+    c.f = floats;
+    c.pc = back;
+    Ok(())
+}
+
+fn sync_catalog_panels(c: &mut Cpu, this: u32, mode: u32, back: u32) -> Flow {
+    let gp = c.g[GP][0] as u32;
+    let selected = crate::custom_tracks::bonus_peak_selected()
+        && c.bus.read32(gp.wrapping_sub(0xb5c)) < 2
+        && c.bus.read32(this.wrapping_add(CONFIRM)) == 0;
+    let tab = c.bus.read32(gp.wrapping_sub(0xb50));
+    let panels: [&[u8]; 3] = [b"SPG_BonusGoals", b"BonusRaceLocations", b"BonusFreestyleLocations"];
+    for (i, name) in panels.into_iter().enumerate() {
+        let visible = selected && ((i == 0 && mode == 1)
+            || (mode == 2 && i == (if tab == 1 { 2 } else { 1 })));
+        catalog_panel(c, this, name, visible, back)?;
+    }
+    if !selected || !(mode == 1 || mode == 2) { return Ok(()); }
+    let hash = crate::game::hashvalue::str_hash;
+    let original: &[u8] = if mode == 1 { b"SPG_Peak1Goals" }
+        else if tab == 1 { b"Peak1FreestyleLocations" } else { b"Peak1RaceLocations" };
+    catalog_panel(c, this, original, false, back)?;
+    if mode == 1 {
+        set_catalog_text(c, this, b"BonusRace", 0x032d_0353, back)?;
+        set_catalog_text(c, this, b"BonusFreestyle", hash(b"kT_TrickyFreestyle"), back)?;
+    } else {
+        let kind = if tab == 1 { "Freestyle" } else { "Race" };
+        for (index, track) in crate::custom_tracks::menu_tracks(tab).enumerate() {
+            let name = format!("Tricky{kind}{index}");
+            set_catalog_text(c, this, name.as_bytes(), hash(track.locale_key.as_bytes()), back)?;
+        }
+    }
+    set_catalog_text(c, this, b"title_title", hash(b"kT_BonusPeakName"), back)?;
+    let subtitle = if mode == 1 { hash(b"kT_FEHelpSelectMode") }
+        else if tab == 1 { hash(b"kT_TrickyFreestyle") } else { 0x032d_0353 };
+    set_catalog_text(c, this, b"SubTitle", subtitle, back)?;
     Ok(())
 }
 
