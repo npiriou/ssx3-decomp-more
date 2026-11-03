@@ -65,6 +65,9 @@ def audit(course, iso: Path, overlay: Path) -> dict:
         path = overlay / f"DATA/WORLDS/TRICKY/{course.code}-{mode}.json"
         if path.exists():
             native[mode] = json.loads(path.read_text())["world"]
+            # The authored mode-entry tombstones further restrict LTG's
+            # scenery list. Their removed contact/focus roots cannot run.
+            mode_instances[mode] -= set(native[mode].get("source_mode_hidden_instances", []))
     replacement_ids = {mode: {item["source_instance"] for item in report["native_replacements"]}
                        for mode, report in native.items()}
     boost_ids = {mode: set(report["source_boost_instances"]) for mode, report in native.items()}

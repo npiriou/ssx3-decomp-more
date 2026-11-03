@@ -27,6 +27,31 @@ fn tracing() -> bool {
     *ENABLED.get_or_init(|| std::env::var_os("SSX3_OBJECT_TRACE").is_some())
 }
 
+/// Source recovery requests respect the current path's NoReset regions.
+/// Tricky's rider entry118f10/119be0/119c90 checks196858 before scheduling
+/// recovery. Native ForceReset deliberately skips that policy, so keep it
+/// at this imported-script boundary. Ranges are the native Path event list;
+/// runtime13 is stored101 after the Tricky104 conversion.
+fn scripted_reset_allowed(c: &mut Cpu, rider: u32) -> bool {
+    if f32::from_bits(c.bus.read32(rider + 0x470)) >= 0. { return false }
+    let owner = c.bus.read32(rider + 0x77c);
+    if owner != 0 && c.bus.read32(owner + 0xde0) == 3 { return false }
+    let path = c.bus.read32(rider + 0xab8);
+    if path == 0 { return true }
+    let count = c.bus.read32(path);
+    let events = c.bus.read32(path + 4);
+    let distance = f32::from_bits(c.bus.read32(rider + 0x4c4));
+    for index in 0..count {
+        let event = events + index * 16;
+        if c.bus.read32(event) == 13 {
+            let start = f32::from_bits(c.bus.read32(event + 8));
+            let end = f32::from_bits(c.bus.read32(event + 12));
+            if start <= distance && distance <= end { return false }
+        }
+    }
+    true
+}
+
 pub(crate) fn resident_instance(c: &mut Cpu, rid: u32) -> Option<u32> {
     let world = c.bus.read32((c.g[GP][0] as u32).wrapping_add(0x16c8));
     if world == 0 { return None }
@@ -122,6 +147,7 @@ pub fn builtin(c: &mut Cpu, id: u32, back: u32) -> Option<Flow> {
     let Some((manager, index, address)) = rider(c) else { return Some(Ok(())) };
     Some(match id {
         111 => {
+            if !scripted_reset_allowed(c, address) { return Some(Ok(())) }
             if tracing() {
                 static COUNT: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
                 if COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed) < 32 {

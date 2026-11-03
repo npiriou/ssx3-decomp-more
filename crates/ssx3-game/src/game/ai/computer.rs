@@ -1246,6 +1246,7 @@ pub(crate) const RACE_EVENTS: u32 = 0x004a_5d60;
 /// Tick rate: 500 units off the path, the reselect is forced once a second
 /// (`now % reselect_period`, 60 ticks at 60 Hz).
 pub fn rider_update_race_progress(c: &mut Cpu) {
+    crate::custom_rail_diagnostics::observe(c, c.g[A0][0] as u32);
     let boost = crate::custom_course_rules::update(c, c.g[A0][0] as u32);
     guest(c, |c| {
         c.cycles += 30;

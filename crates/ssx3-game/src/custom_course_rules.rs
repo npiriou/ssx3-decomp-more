@@ -308,6 +308,16 @@ pub fn update(c: &mut Cpu, address: u32) -> Option<BoostUpdate> {
         return None;
     }
     seed_timer(c, &mut rules);
+    if float(c, address + 0x470) >= 0. {
+        // Native OnFinishRace starts this timer. Authored fans/conveyors
+        // stop affecting that rider once the finish presentation owns it.
+        if let Some(rider) = rules.riders.get_mut(&address) {
+            rider.previous = None;
+            rider.stage = 0;
+            for contact in &mut rider.contacts { *contact = Contact::default(); }
+        }
+        return None;
+    }
     if rules.volumes.is_empty() {
         return None;
     }

@@ -59,6 +59,7 @@ def main() -> None:
         from ssx3_bonus_menu import add_bonus_locale, add_bonus_screen
         from tricky_assets import read_iso_file
         for name, convert in (("DATA/UI/FE.LUI", add_bonus_screen),
+                              ("DATA/UI/OV.LUI", add_bonus_screen),
                               ("DATA/LOCALE/CMNAMER.LOC", add_bonus_locale)):
             target = args.overlay / name
             target.parent.mkdir(parents=True, exist_ok=True)

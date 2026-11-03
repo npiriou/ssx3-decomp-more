@@ -42,6 +42,49 @@ def read_logic(data: bytes) -> tuple[list[tuple], list[list[dict]], list[dict]]:
     return slots, effects, functions
 
 
+def mode_hidden_instances(ssf, mode):
+    """Resolve scenery killed unconditionally at mode entry.
+
+    LTG's Showoff list is not the complete mode filter: RaceMode/ShowoffMode
+    also hide objects through ordinary SSF graphs, alongside rail switches.
+    Retain any target referenced by another graph, since it can be revived.
+    """
+    _, chains, functions = read_logic(ssf)
+
+    def visit(nodes, owner, seen, hidden, offsets):
+        for node in nodes:
+            main, words = node["main"], node["words"]
+            offsets.add(node["offset"])
+            if main in (4, 5):
+                return  # no constant baseline beyond a wait/condition
+            if main == 7:
+                target, chain = words[:2]
+                key = (target, chain)
+                if chain < len(chains) and key not in seen:
+                    visit(chains[chain], target, seen | {key}, hidden, offsets)
+            elif main in (21, 26):
+                index = words[0]
+                key = ("function", index)
+                if index < len(functions) and key not in seen:
+                    visit(functions[index]["nodes"], owner, seen | {key}, hidden, offsets)
+            elif main == 0 and words in ((5, 2), (5, 4)) and owner is not None:
+                hidden.add(owner)
+
+    mode_offsets = set()
+    hidden = set()
+    entry = "ShowoffMode" if mode == "freestyle" else "RaceMode"
+    for function in functions:
+        if function["name"] in ("ShowoffMode", "RaceMode", "FreerideMode"):
+            visit(function["nodes"], None, set(), hidden if function["name"] == entry else set(),
+                  mode_offsets)
+    referenced = set()
+    for nodes in chains + [function["nodes"] for function in functions]:
+        for node in nodes:
+            if node["main"] in (7, 24) and node["offset"] not in mode_offsets:
+                referenced.add(node["words"][0])
+    return hidden - referenced, hidden & referenced
+
+
 def source_pickups(ssf, collision, instances):
     """Recognize visible pickup actors by their authored contact effect.
 
@@ -128,8 +171,9 @@ def pack_object_scripts(ssf, pbd, models, collision, instances, source_to_instan
                 chain = words[1]
                 key = ("chain", chain)
                 if chain < len(chains) and key not in seen:
-                    if not setup_rails(chains[chain], seen | {key}):
-                        return False
+                    # ActOn's child can suspend/end independently; constant
+                    # assignments later in the caller still execute.
+                    setup_rails(chains[chain], seen | {key})
         return True
 
     entry = "ShowoffMode" if mode == "freestyle" else "RaceMode"
@@ -145,7 +189,7 @@ def pack_object_scripts(ssf, pbd, models, collision, instances, source_to_instan
         return struct.unpack("<f", struct.pack("<I", bits))[0]
 
     def expand(nodes, owner, seen):
-        """ActOn runs a target graph in the current thread/continuation."""
+        """Resolve ActOn targets while retaining their separate graph thread."""
         nonlocal scope_counter
         scope = scope_counter
         scope_counter += 1
@@ -155,7 +199,8 @@ def pack_object_scripts(ssf, pbd, models, collision, instances, source_to_instan
                 target, chain = node["words"][:2]
                 key = (target, chain)
                 if target in selected and key not in seen and chain < len(chains):
-                    result.extend(expand(chains[chain], target, seen | {key}))
+                    result.append((owner, dict(node, scope=scope,
+                        child=expand(chains[chain], target, seen | {key}))))
             else:
                 result.append((owner, dict(node, scope=scope)))
         result.append((owner, {"main": -1, "words": (), "offset": -1, "scope": scope}))
@@ -204,6 +249,14 @@ def pack_object_scripts(ssf, pbd, models, collision, instances, source_to_instan
             main, words = node["main"], node["words"]
             if main == -1:
                 commands.append((LABEL, node["scope"]))
+            elif main == 7:
+                # Original Tricky Main7 (13c2e4..13c380) allocates a new
+                # cScriptNode for the target, inherits rider/contact, and
+                # returns success immediately. A child's Wait must suspend
+                # only that child. Flattening it here made Mesa's cart wait
+                # three seconds, then made its caller wait three more before
+                # launching the second cart body at the authored hand-off.
+                walk(node["child"], root, native_slot, active_functions, commands)
             elif main == 5:
                 if len(words) != 3 or words[0] not in (0, 1, 2, 3):
                     raise FormatError("invalid Tricky predicate mode")
@@ -513,7 +566,23 @@ def pack_object_scripts(ssf, pbd, models, collision, instances, source_to_instan
         if binding not in interactives.bindings:
             interactives.bindings.append(binding)
         interactives.object_bindings[owner] = (interactives.bindings.index(binding) << 8) | section
-    interactives.contact_only_instances = popping
+    # Unconditional break-through contacts consume their intact host before
+    # throwing fragments. Use the working non-bouncing trigger contract for
+    # these too. A speed/probability gate or deferred break keeps its original
+    # response until its conditional contact handling is supported explicitly.
+    break_through = set()
+    for (owner, native_slot), calls in roots.items():
+        if native_slot != 2:
+            continue
+        removed_host = False
+        for builtin, arguments in calls:
+            if builtin in (GATE, 115):
+                break
+            if builtin == 2 and arguments[0][1] == instance_rid(owner):
+                removed_host = True
+            if builtin == 13 and removed_host:
+                break_through.add(owner)
+    interactives.contact_only_instances = popping | break_through
     return {"native_object_animations": sum(kind == 256 for kind in records.values()),
             "native_delta_animations": sum(kind == 257 for kind in records.values()),
             "native_combo_animations": sum(kind == 258 for kind in records.values()),
@@ -533,7 +602,8 @@ def pack_object_scripts(ssf, pbd, models, collision, instances, source_to_instan
             "source_roller_instances": sorted(rollers),
             "source_initial_debounce_instances": sorted(initial_debounce),
             "source_pop_burst_nodes": sorted(pop_bursts),
-            "source_contact_only_instances": sorted(popping),
+            "source_contact_only_instances": sorted(interactives.contact_only_instances),
+            "source_non_bouncing_breakables": sorted(break_through),
             "native_emitter_anchors": [[owner, rid] for owner, rid in interactives.emitter_anchors.items()],
             "source_leave_latches": sorted(owner for owner, slot in roots if slot == 3),
             "source_end_latches": sorted(owner for owner, slot in roots if slot == 4),

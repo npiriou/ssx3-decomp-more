@@ -35,7 +35,7 @@ from tricky_ssh import inspect_world_ssh, parse_shps, to_world_ssh
 from tricky_courses import Course, course
 from ssx3_tricky_sky import import_sky
 from tricky_gameplay import pack_gameplay
-from tricky_object_effects import pack_object_scripts, source_pickups
+from tricky_object_effects import pack_object_scripts, source_pickups, mode_hidden_instances
 from tricky_race_settings import showoff_catalog
 
 
@@ -97,6 +97,8 @@ def build(SSX3_iso: Path, tricky_iso: Path, output: Path, *,
     instance_list = "race_instances" if mode == "race" else "showoff_instances"
     race_instances = sorted({index for node in spatial["nodes"]
                              for index in node[instance_list]})
+    mode_hidden, mode_dynamic_hidden = mode_hidden_instances(ssf_data, mode)
+    race_instances = [index for index in race_instances if index not in mode_hidden]
     aip_source = read_cofb_member(tricky_archive, f"data/models/{stem}.aip")
     timing = showoff_catalog(tricky_iso)[selected.code]
     gameplay, gameplay_summary = pack_gameplay(
@@ -336,6 +338,8 @@ def build(SSX3_iso: Path, tricky_iso: Path, output: Path, *,
         "model_count": len(model_ids) + len(interactives.model_ids),
         "material_count": len(material_ids) + len(interactives.material_ids),
         "source_model_count": len(models),
+        "source_mode_hidden_instances": sorted(mode_hidden),
+        "source_mode_hidden_dynamic_targets": sorted(mode_dynamic_hidden),
         "instance_count": len(race_instances) + len(interactives.posts) + len(interactives.emitter_anchors),
         **interactives.summary(),
         "collision_count": physics_base + len(collision_data["physics"]),

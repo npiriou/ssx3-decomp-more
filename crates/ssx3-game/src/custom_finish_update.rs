@@ -113,7 +113,10 @@ fn riders_still_moving(c: &mut Cpu) -> Result<bool, Unwound> {
     c.g[V0][0] = c.lw(r(c, V1).wrapping_add(0x84));
     c.g[S5][0] = c.lw(r(c, V1).wrapping_add(0xc0));
     c.g[V1][0] = c.lw(r(c, V0).wrapping_add(0xc));
-    let skip_speed_wait = c.g[A0][0] != 0;
+    // Additional worlds deliberately have no template finish-camera list.
+    // Their result overlay must not wait for every rider to settle on a
+    // slope, conveyor or lift. Preserve the native setup of S5/S1 above.
+    let skip_speed_wait = c.g[A0][0] != 0 || crate::custom_tracks::active().is_some();
     c.g[S1][0] = c.lw(r(c, V1).wrapping_add(0x7c));
     if skip_speed_wait {
         return Ok(false);

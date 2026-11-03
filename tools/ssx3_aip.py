@@ -125,10 +125,17 @@ def _native_path_records(ai: list[bytes], race: list[bytes],
         body = bytearray(record[:fixed + 44 + 16 * points])
         source = _events(record, kind)
         if kind == "ai":
-            # These keys exist in SSX 3's native AI event table. Unsupported
-            # Tricky commands (notably 105) are omitted, not reinterpreted.
-            native = [event for event in source
-                      if event[0] in (100, 101, 102, 103, 110, 111, 112, 113, 300)]
+            # These are distinct enums, even where the numbers overlap.
+            # Tricky Path_FindMarkerBoundary196758 handles stored100/103/105;
+            # native269f18 handles100/102/110 for the same three clamps.
+            # Tricky196858 blocks resets for104; native26a000 does so for101.
+            # Native speed markers are111 (runtime17), not101 (NoReset).
+            # Source102 has no established consumer: do not turn it into a
+            # native ResetBeforeRegion merely because that key exists.
+            event_keys = {100: 100, 101: 111, 103: 102, 104: 101,
+                          105: 110, 300: 300}
+            native = [(event_keys[key], value, start, end)
+                      for key, value, start, end in source if key in event_keys]
         else:
             native = []
             remaining = struct.unpack_from("<f", record, 12)[0]

@@ -60,7 +60,7 @@ def _row(rows: list[bytearray], name: int) -> bytearray:
 
 def add_peak_to_screen(screen: bytes) -> bytes:
     if len(screen) < 32 or struct.unpack_from("<I", screen)[0] != EVENT_SELECT_SCREEN:
-        raise FormatError("FE.LUI does not contain the expected Event Select screen")
+        raise FormatError("LUI does not contain the expected Event Select screen")
     second = struct.unpack_from("<I", screen, 8)[0]
     first_count = struct.unpack_from("<I", screen, 16)[0]
     first, end = _records(screen, 20, first_count)
@@ -206,7 +206,7 @@ def add_bonus_locale(data: bytes) -> bytes:
 
 def add_bonus_screen(data: bytes) -> bytes:
     if len(data) < 24 or data[:4] != b"IYF\0":
-        raise FormatError("FE.LUI has an unsupported header")
+        raise FormatError("LUI has an unsupported header")
     screen_table = struct.unpack_from("<I", data, 12)[0]
     object_table = struct.unpack_from("<I", data, 16)[0]
     font_table = struct.unpack_from("<I", data, 20)[0]
@@ -216,7 +216,7 @@ def add_bonus_screen(data: bytes) -> bytes:
     index = next((i for i, (name, _) in enumerate(entries)
                   if name == EVENT_SELECT_SCREEN), None)
     if index is None or index + 1 >= count:
-        raise FormatError("Event Select screen is absent from FE.LUI")
+        raise FormatError("Event Select screen is absent from LUI")
     begin = screen_table + entries[index][1]
     end = screen_table + entries[index + 1][1]
     original = decode_refpack(data[begin:end])
@@ -243,8 +243,10 @@ def main() -> None:
     parser.add_argument("--overlay", type=Path, default=Path(".cache/overlay"))
     args = parser.parse_args()
     fe = add_bonus_screen(read_iso_file(args.iso, "DATA/UI/FE.LUI"))
+    overlay = add_bonus_screen(read_iso_file(args.iso, "DATA/UI/OV.LUI"))
     locale = add_bonus_locale(read_iso_file(args.iso, "DATA/LOCALE/CMNAMER.LOC"))
     for path, payload in (("DATA/UI/FE.LUI", fe),
+                          ("DATA/UI/OV.LUI", overlay),
                           ("DATA/LOCALE/CMNAMER.LOC", locale)):
         target = args.overlay / path
         target.parent.mkdir(parents=True, exist_ok=True)
