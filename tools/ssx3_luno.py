@@ -19,6 +19,7 @@ def calls_blob(calls):
     Original retail scripts never name these slots.
     """
     code = []
+    guards = []
     maximum = 0
     for builtin, arguments in calls:
         if not 0 <= builtin < 256 or len(arguments) > 255:
@@ -29,6 +30,15 @@ def calls_blob(calls):
                 raise ValueError("unsupported Luno named scalar argument")
             code.extend(((0x26 if kind == 2 else 0x25) | (index << 8), bits))
         code.append(0x21 | (2 << 8) | (builtin << 16) | (len(arguments) << 24))
+        if builtin == 116:
+            # Native opcode 2 branches on a false scalar. Its high word is
+            # an absolute instruction index, not a byte offset.
+            guards.append(len(code))
+            code.append(2 | (2 << 8))
+    if len(code) > 65535:
+        raise ValueError("Luno guard target exceeds the native instruction field")
+    for index in guards:
+        code[index] |= len(code) << 16
     code.append(0xff2a)  # return without a value, as in retail object scripts
     table = 16 + len(code) * 4
     end = table + 16

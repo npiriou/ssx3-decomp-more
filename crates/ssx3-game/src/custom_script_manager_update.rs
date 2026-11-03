@@ -1,7 +1,7 @@
-//! Native world-script manager update, retained uninstalled.
+//! Native world-script manager update and imported deferred graph segments.
 //!
 //! No tests, builds or replays were added or run: the user has disabled
-//! automated validation. This port adds no imported-script hooks.
+//! automated validation. Native process/command ordering is retained.
 
 use crate::call::{call_ptr, guest, Frame};
 use crate::events::back_edge_unwinds;
@@ -57,7 +57,9 @@ pub fn wscript_man_update(c: &mut Cpu) {
                     frame.save(c, S6, 0x1b0);
                     frame.save(c, S7, 0x1a0);
                     frame.save_ra(c, 0x190);
+                    c.g[S7][0] = 0;
                     c.g[S2][0] = c.g[A0][0];
+                    crate::custom_script_queue::begin_update(c);
                     call_ptr(c, 0x0030_9118, 0x0030_92a0)?;
                     pc = 0x0030_92a0;
                 }
@@ -315,6 +317,18 @@ pub fn wscript_man_update(c: &mut Cpu) {
                     }
                 }
                 0x0030_949c => {
+                    if c.g[S7][0] != 0 {
+                        crate::custom_script_queue::finish(c, r(c, S2), r(c, SP));
+                        c.g[S7][0] = 0;
+                    }
+                    if crate::custom_script_queue::prepare_next(c, r(c, S2), r(c, SP)) {
+                        c.g[S7][0] = 1;
+                        c.g[A0][0] = c.g[S2][0];
+                        c.g[A1][0] = c.g[SP][0];
+                        call_ptr(c, 0x0030_9c88, 0x0030_949c)?;
+                        pc = 0x0030_949c;
+                        continue;
+                    }
                     c.cycles += 11;
                     frame.restore(c, S0, 0x210);
                     frame.restore(c, S1, 0x200);

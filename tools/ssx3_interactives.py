@@ -97,6 +97,7 @@ class NativeInteractives:
         self.posts = []
         self.bindings = []
         self.object_bindings = {}
+        self.rail_initial = {}
         self.functions = []
         self.function_ids = {}
         self.properties = {}
@@ -261,6 +262,19 @@ class NativeInteractives:
             self.functions.append(code)
         return (self.function_ids[key] << 8) | self.section
 
+    def reserve_function(self):
+        """Reserve a stable RID before compiling recursive graph references."""
+        index = len(self.functions)
+        self.functions.append(b"")
+        return (index << 8) | self.section
+
+    def define_function(self, rid, code):
+        index = rid >> 8
+        if rid & 255 != self.section or self.functions[index]:
+            raise FormatError("invalid reserved native graph function")
+        self.functions[index] = code
+        self.function_ids.setdefault(("compiled", code), index)
+
     def records(self):
         """Native model/material payloads; texture IDs remain global retail IDs."""
         for (bank, source), rid in self.material_ids.items():
@@ -292,6 +306,8 @@ class NativeInteractives:
         yield from sorted(images.items())
 
     def pack_script_tables(self, out):
+        if any(not code for code in self.functions):
+            raise FormatError("native graph function reservation was not defined")
         # Header+0x10 contains section-wide callback handles, not scalar
         # globals. ARA1's callbacks set up its scenery, emitters and collect
         # sets; none belongs to Garibaldi. Only copy per-object scripts.

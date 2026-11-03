@@ -31,6 +31,9 @@ pub mod call;
 pub mod custom_tracks;
 pub mod custom_course_rules;
 pub mod custom_script_effects;
+pub mod custom_script_queue;
+pub mod custom_rail_rules;
+pub mod custom_script_manager_update;
 pub mod custom_anim_object_factory;
 pub mod custom_anim_object_ctor;
 pub mod custom_race_path_select;
@@ -198,6 +201,7 @@ pub fn overrides() -> Vec<(u32, GuestFn, &'static str)> {
     v.extend_from_slice(custom_static_objects::OVERRIDES);
     v.extend_from_slice(custom_anim_object_factory::OVERRIDES);
     v.extend_from_slice(custom_anim_object_ctor::OVERRIDES);
+    v.extend_from_slice(custom_script_manager_update::OVERRIDES);
     v.extend_from_slice(custom_static_object_ctor::OVERRIDES);
     v.extend_from_slice(custom_surface_defaults::OVERRIDES);
     v.extend_from_slice(custom_attach_modifier::OVERRIDES);

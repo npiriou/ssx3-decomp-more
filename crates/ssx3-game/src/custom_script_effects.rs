@@ -27,7 +27,7 @@ fn tracing() -> bool {
     *ENABLED.get_or_init(|| std::env::var_os("SSX3_OBJECT_TRACE").is_some())
 }
 
-fn resident_instance(c: &mut Cpu, rid: u32) -> Option<u32> {
+pub(crate) fn resident_instance(c: &mut Cpu, rid: u32) -> Option<u32> {
     let world = c.bus.read32((c.g[GP][0] as u32).wrapping_add(0x16c8));
     if world == 0 { return None }
     let cache = c.bus.read32(world);
@@ -74,11 +74,33 @@ fn teleport_frame(c: &mut Cpu, index: i32, matrix: u32) -> bool {
 /// output is initialized first, so the VM's existing unwind continuation is
 /// also valid if the native action yields.
 pub fn builtin(c: &mut Cpu, id: u32, back: u32) -> Option<Flow> {
-    if !(111..=114).contains(&id) || crate::custom_tracks::active().is_none() {
+    if !(111..=119).contains(&id) || crate::custom_tracks::active().is_none() {
         return None;
     }
     let out = c.g[A0][0] as u32;
     for offset in [0, 4, 8] { c.bus.write32(out + offset, 0); }
+    if id == 115 {
+        crate::custom_script_queue::schedule(c);
+        return Some(Ok(()));
+    }
+    if id == 116 {
+        let allowed = crate::custom_script_queue::can_start(c);
+        c.bus.write32(out, allowed as u32);
+        c.bus.write32(out + 8, 1);
+        return Some(Ok(()));
+    }
+    if id == 117 {
+        crate::custom_script_queue::detach(c);
+        return Some(Ok(()));
+    }
+    if id == 118 {
+        crate::custom_script_queue::restore_scope(c);
+        return Some(Ok(()));
+    }
+    if id == 119 {
+        crate::custom_rail_rules::builtin(c);
+        return Some(Ok(()));
+    }
     let Some((manager, index, address)) = rider(c) else { return Some(Ok(())) };
     Some(match id {
         111 => {

@@ -143,7 +143,7 @@ def build(SSX3_iso: Path, tricky_iso: Path, output: Path, *,
                          source_to_instance)
     object_summary = pack_object_scripts(
         ssf_data, pbd, models, collision_data, race_instances, source_to_instance,
-        interactives, section_id)
+        interactives, section_id, mode)
     source_textures = {patch["texture_assignment"] for patch in pbd["patches"]}
     source_textures.update(material["texture_id"] for material in materials
                            if material["texture_id"] >= 0)

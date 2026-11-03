@@ -96,6 +96,8 @@ def pack_world_script(pbd: dict, models: list[dict], source: dict,
         style = -1 if spline["style"] == 0xffffffff else spline["style"]
         native_surface = surface(style).native_id
         flags = 3 if spline["rail_flags"] & 1 and native_surface >= 0 else 0
+        if interactives and spline["index"] in interactives.rail_initial:
+            flags = 3 if interactives.rail_initial[spline["index"]] else 0
         out.extend(struct.pack("<I", ((native_surface & 0xffff) << 16) | flags))
     return bytes(out), {"native_object_properties": len(offsets),
                         "native_instance_assignments": len(instance_properties),

@@ -43,7 +43,7 @@ def read_logic(data: bytes) -> tuple[list[tuple], list[list[dict]], list[dict]]:
 
 
 def pack_object_scripts(ssf, pbd, models, collision, instances, source_to_instance,
-                           interactives, section):
+                           interactives, section, mode):
     slots, chains, functions = read_logic(ssf)
     selected = set(instances)
     records = {}
@@ -56,27 +56,110 @@ def pack_object_scripts(ssf, pbd, models, collision, instances, source_to_instan
     scrolls = set()
     flips = set()
     receiver_kinds = {}
+    tasks = {}
+    task_ids = {}
+    waits = set()
+    invisible_tombstones = set()
+    rail_switches = set()
+
+    # Mode setup runs before play in Tricky. Bake its unconditional rail
+    # assignments into native initial properties, so restarting also has the
+    # correct baseline. Do not run the rest of these setup graphs as scenery
+    # focus callbacks: a later focus entry must not undo a player's switch.
+    initial_rails = {}
+
+    def setup_rails(nodes, seen):
+        for node in nodes:
+            main, words = node["main"], node["words"]
+            if main in (4, 5):
+                return False  # not a constant baseline beyond this point
+            if main == 25:
+                rail, enabled = words
+                if rail >= len(collision["splines"]) or enabled not in (0, 1):
+                    raise FormatError("invalid Tricky initial rail assignment")
+                initial_rails[rail] = enabled
+            elif main in (21, 26):
+                function = words[0]
+                key = ("function", function)
+                if function < len(functions) and key not in seen:
+                    setup_rails(functions[function]["nodes"], seen | {key})
+            elif main == 7:
+                chain = words[1]
+                key = ("chain", chain)
+                if chain < len(chains) and key not in seen:
+                    if not setup_rails(chains[chain], seen | {key}):
+                        return False
+        return True
+
+    entry = "ShowoffMode" if mode == "freestyle" else "RaceMode"
+    for function in functions:
+        if function["name"] == entry:
+            setup_rails(function["nodes"], set())
+    interactives.rail_initial = initial_rails
+
+    def instance_rid(owner):
+        return (source_to_instance[owner] << 8) | section
 
     def float_value(bits):
         return struct.unpack("<f", struct.pack("<I", bits))[0]
 
-    def walk(nodes, owner, seen, commands):
+    def expand(nodes, owner, seen):
+        """ActOn runs a target graph in the current thread/continuation."""
+        result = []
         for node in nodes:
-            main, words = node["main"], node["words"]
-            # A later wave must translate their scheduling/predicates. Never
-            # hoist later actions across a wait or conditional gate.
-            if main in (4, 5):
+            if node["main"] == 5:
+                # Retain this graph's unconditional prefix. A caller may
+                # still continue after it; predicate execution is pending.
                 break
-            if main == 7:
-                target, chain = words[:2]
-                key = ("chain", target, chain)
+            elif node["main"] == 7:
+                target, chain = node["words"][:2]
+                key = (target, chain)
                 if target in selected and key not in seen and chain < len(chains):
-                    walk(chains[chain], target, seen | {key}, commands)
+                    result.extend(expand(chains[chain], target, seen | {key}))
+            else:
+                result.append((owner, node))
+        return result
+
+    def compile_task(items, root, native_slot):
+        key = (root, native_slot, tuple((owner, node["offset"]) for owner, node in items))
+        if key not in task_ids:
+            rid = interactives.reserve_function()
+            task_ids[key] = rid
+            calls = []
+            # A wait resumes after the immediate graph stack has unwound.
+            # Reserving first also permits authored loops across a wait.
+            walk(items, root, native_slot, set(), calls)
+            tasks[rid] = calls
+        return task_ids[key]
+
+    def walk(items, root, native_slot, active_functions, commands):
+        for index, (owner, node) in enumerate(items):
+            main, words = node["main"], node["words"]
+            if main == 5:
+                # Predicates remain a later graph operation. Do not execute
+                # their tails unconditionally while implementing waits.
+                break
+            if main == 4:
+                if len(words) != 1 or not math.isfinite(float_value(words[0])) or float_value(words[0]) < 0:
+                    raise FormatError("invalid Tricky wait duration")
+                tail = compile_task(items[index + 1:], root, native_slot)
+                commands.append((115, [(0, tail, 1), (1, instance_rid(owner), 1),
+                                       (2, words[0], 2), (3, instance_rid(root), 1),
+                                       (4, native_slot, 1)]))
+                waits.add((owner, node["offset"]))
+                break
             elif main in (21, 26):
-                index = words[0]
-                key = ("function", owner, index)
-                if key not in seen and index < len(functions):
-                    walk(functions[index]["nodes"], owner, seen | {key}, commands)
+                function = words[0]
+                key = (owner, function)
+                if key not in active_functions and function < len(functions):
+                    child = expand(functions[function]["nodes"], owner, set())
+                    # The new thread's immediate prefix runs now; its waits
+                    # schedule only that child tail, and the caller continues.
+                    if main == 26:
+                        commands.append((117, [(0, instance_rid(owner), 1)]))
+                    walk(child, root, native_slot, active_functions | {key}, commands)
+                    if main == 26:
+                        commands.append((118, []))
             elif owner in interactives.replacements:
                 continue
             elif main == 13:
@@ -93,6 +176,12 @@ def pack_object_scripts(ssf, pbd, models, collision, instances, source_to_instan
                 # then primes its path without sweeping skipped checkpoints.
                 commands.extend(((112, [(0, rid, 1)]), (113, []), (114, [])))
                 teleports[owner] = destination
+            elif main == 25:
+                if len(words) != 2 or words[0] >= len(collision["splines"]) or words[1] not in (0, 1):
+                    raise FormatError("invalid Tricky rail switch parameters")
+                rail, enabled = words
+                commands.append((119, [(0, (rail << 8) | section, 1), (1, enabled, 1)]))
+                rail_switches.add(rail)
             elif main == 0 and words[0] == 5 and words[1] == 4:
                 # Tricky's hard breakable kill is native DeadNode mode zero.
                 # Its constructor clears drawing/collision and the native
@@ -100,6 +189,15 @@ def pack_object_scripts(ssf, pbd, models, collision, instances, source_to_instan
                 rid = (source_to_instance[owner] << 8) | section
                 commands.append((2, [(0, rid, 1), (1, 0, 1)]))
                 hidden.add(owner)
+            elif main == 0 and words[0] == 5 and words[1] == 2:
+                prop = collision["properties"][collision["instance_properties"][owner]]
+                if not prop["flags"] & 1:
+                    # Invisible one-shot triggers (e.g. Mesa's tree switch)
+                    # need no drawing-node policy: disable their contacts with
+                    # the native persistent DeadNode. Visible tombstones and
+                    # detached mover ownership remain separate work.
+                    commands.append((2, [(0, instance_rid(owner), 1), (1, 0, 1)]))
+                    invisible_tombstones.add(owner)
             elif main == 0 and words[0] == 20:
                 model = models[pbd["instances"][owner]["model_id"]]
                 if len(words) != 11 or len(model["objects"]) > 24:
@@ -222,9 +320,33 @@ def pack_object_scripts(ssf, pbd, models, collision, instances, source_to_instan
             chain = slots[slot][source_channel]
             if chain >= 0:
                 commands = []
-                walk(chains[chain], owner, {("chain", owner, chain)}, commands)
-                if any(builtin in (2, 3, 4, 5, 13, 21, 22, 28, 111, 112) for builtin, _ in commands):
-                    roots[owner, native_slot] = commands
+                walk(expand(chains[chain], owner, {(owner, chain)}), owner,
+                     native_slot, set(), commands)
+                roots[owner, native_slot] = commands
+    # Do not schedule loops consisting only of unimplemented sounds/emitters.
+    # Keep every continuation which reaches a supported action, including
+    # through other continuations; remove only code with no native consumer.
+    meaningful = {2, 3, 4, 5, 13, 21, 22, 28, 111, 112, 119}
+    live_tasks = set()
+    while True:
+        discovered = {rid for rid, calls in tasks.items() if any(
+            builtin in meaningful or (builtin == 115 and args[0][1] in live_tasks)
+            for builtin, args in calls)}
+        if discovered == live_tasks:
+            break
+        live_tasks = discovered
+
+    def supported(calls):
+        return [call for call in calls if call[0] != 115 or call[1][0][1] in live_tasks]
+
+    for rid, calls in tasks.items():
+        interactives.define_function(rid, calls_blob(supported(calls)))
+    roots = {key: supported(calls) for key, calls in roots.items()}
+    roots = {key: calls for key, calls in roots.items()
+             if any(builtin in meaningful or builtin == 115 for builtin, _ in calls)}
+    for (owner, native_slot), calls in roots.items():
+        if any(builtin == 115 for builtin, _ in calls):
+            calls.insert(0, (116, [(0, instance_rid(owner), 1), (1, native_slot, 1)]))
     owners = sorted({owner for owner, _ in roots})
     for owner in owners:
         binding = [0xffffffff] * 6
@@ -250,4 +372,9 @@ def pack_object_scripts(ssf, pbd, models, collision, instances, source_to_instan
             "native_object_script_owners": owners,
             "source_uv_scroll_instances": sorted(scrolls),
             "source_texture_flip_instances": sorted(flips),
+            "native_deferred_functions": len(live_tasks),
+            "source_wait_nodes": sorted(waits),
+            "source_invisible_tombstones": sorted(invisible_tombstones),
+            "source_initial_rail_states": initial_rails,
+            "source_scripted_rail_switches": sorted(rail_switches),
             "source_animated_instances": sorted({owner for owner, _ in records})}

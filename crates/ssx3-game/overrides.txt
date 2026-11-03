@@ -5464,3 +5464,4 @@
 0x00112fb0    Rider_UpdateDistToFinish
 0x001127f0    Rider_SelectRacePath
 0x00113130    Rider_GetStartDistToFinish
+0x00309270    WScriptMan_Update
