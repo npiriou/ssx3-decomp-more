@@ -47,6 +47,10 @@ fn overlay_visibility(c: &mut Cpu, visible: u64, returns: [u32; 3]) -> Flow {
     call_ptr(c, 0x0039_f9d8, returns[1])?;
     c.g[A3][0] = c.g[V0][0];
     let found = c.g[A3][0] != 0;
+    crate::custom_finish_trace::observe(
+        c, if visible != 0 { "overlay-show-lookup" } else { "overlay-hide-lookup" },
+        r(c, S3), r(c, A3),
+    );
     c.g[A1][0] = visible;
     if found {
         c.cycles += 6;
@@ -89,10 +93,12 @@ fn overlay_timer(c: &mut Cpu) -> Result<bool, Unwound> {
     }
     c.cycles += 2;
     if c.g[A1][0] != 0 {
+        crate::custom_finish_trace::observe(c, "overlay-timer-gated", r(c, S3), r(c, A0));
         c.g[S0][0] = c.lw(r(c, S3).wrapping_add(PHASE));
         return Ok(true);
     }
     c.cycles += 6;
+    crate::custom_finish_trace::observe(c, "overlay-delay-expired", r(c, S3), 0);
     call_ptr(c, 0x0020_cc60, 0x0023_3d54)?;
     c.g[V1][0] = c.lw(r(c, S3).wrapping_add(PHASE));
     c.g[V0][0] = 2;
@@ -184,6 +190,7 @@ fn riders_still_moving(c: &mut Cpu) -> Result<bool, Unwound> {
 /// then advance to the native finish overlay. An empty list leaves next=7.
 fn prepare_finish(c: &mut Cpu, frame: Frame) -> Result<Restore, Unwound> {
     if riders_still_moving(c)? {
+        crate::custom_finish_trace::observe(c, "wait-rider-speed", r(c, S3), 0);
         return Ok(Restore::Both);
     }
     c.cycles += 7;
@@ -205,6 +212,7 @@ fn prepare_finish(c: &mut Cpu, frame: Frame) -> Result<Restore, Unwound> {
     }
     c.cycles += 2;
     if c.g[A0][0] != 0 {
+        crate::custom_finish_trace::observe(c, "wait-mode-results", r(c, S3), 0);
         frame.restore(c, S0, 0x60);
         return Ok(Restore::S1);
     }
@@ -226,6 +234,7 @@ fn prepare_finish(c: &mut Cpu, frame: Frame) -> Result<Restore, Unwound> {
         c.cycles += 1;
         c.sw(r(c, S3), c.g[V0][0]);
     }
+    crate::custom_finish_trace::observe(c, "presentation-selected", r(c, S3), u32::from(have_cinematic));
     c.cycles += 4;
     c.g[V0][0] = sx(r(c, S0).wrapping_add(0x5bc8));
     c.g[V1][0] = c.lb(r(c, V0).wrapping_add(0x48));
@@ -251,6 +260,7 @@ fn show_finish(c: &mut Cpu) -> Flow {
     let loading = c.g[V0][0] == c.g[S0][0];
     c.g[V1][0] = c.lw(gp(c, APP_GP));
     if loading {
+        crate::custom_finish_trace::observe(c, "wait-presentation", r(c, S3), r(c, V0));
         return Ok(());
     }
     overlay_visibility(c, 1, [0x0023_3f60, 0x0023_3f6c, 0x0023_3f90])?;
@@ -268,6 +278,7 @@ fn show_finish(c: &mut Cpu) -> Flow {
 /// Phase two waits for the finish overlay. Only the original free-ride
 /// special case advances immediately here; event UI actions advance races.
 fn finish_visible(c: &mut Cpu, frame: Frame) -> Result<Restore, Unwound> {
+    crate::custom_finish_trace::observe(c, "finish-visible", r(c, S3), 0);
     c.cycles += 5;
     c.g[V0][0] = 0x0053_0000;
     c.g[V0][0] = sx(r(c, V0).wrapping_add(0x5bc8));
@@ -291,8 +302,10 @@ fn finish_visible(c: &mut Cpu, frame: Frame) -> Result<Restore, Unwound> {
 
 /// `void GameStateFinish_Update(GameStateFinish* self)` (0x233cd8).
 /// Keep the native finish delay, rider slowdown, result overlay, and optional
-/// race presentation. This port does not add a custom-course policy.
+/// race presentation. Imported courses bypass the speed wait and career
+/// mutations; native mode completion and UI actions still own progression.
 pub fn update(c: &mut Cpu) {
+    crate::custom_finish_trace::observe(c, "finish-update", r(c, A0), 0);
     guest(c, |c| {
         c.cycles += 18;
         let frame = Frame::open(c, 0x80);

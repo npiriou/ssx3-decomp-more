@@ -46,6 +46,7 @@ mod custom_flags;
 mod custom_spline_movers;
 mod custom_force_overlap;
 mod custom_rail_diagnostics;
+mod custom_finish_trace;
 mod custom_contact_trace;
 pub mod custom_rail_rules;
 pub mod custom_script_manager_update;

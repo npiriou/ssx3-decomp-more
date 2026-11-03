@@ -29,6 +29,7 @@ fn script_engine(c: &mut Cpu) -> u64 {
 /// stop presentation list zero and open the native results screen (state 7).
 /// This does not clear the race-result snapshot or its time/place fields.
 pub fn enter(c: &mut Cpu) {
+    crate::custom_finish_trace::observe(c, "results-enter", 0, r(c, A0));
     guest(c, |c| {
         c.cycles += 16;
         let frame = Frame::open(c, 0x50);
@@ -89,7 +90,9 @@ pub fn enter(c: &mut Cpu) {
         call_ptr(c, 0x0027_90a0, 0x0023_6e34)?;
         c.sw(r(c, S3).wrapping_add(FINISHED), 0);
         c.g[A0][0] = 7;
+        crate::custom_finish_trace::observe(c, "results-screen-request", 0, 7);
         call_ptr(c, 0x0020_a8f8, 0x0023_6e40)?;
+        crate::custom_finish_trace::observe(c, "results-screen-returned", 0, 7);
         frame.restore(c, S0, 0x40);
         frame.restore(c, S1, 0x30);
         frame.restore(c, S2, 0x20);

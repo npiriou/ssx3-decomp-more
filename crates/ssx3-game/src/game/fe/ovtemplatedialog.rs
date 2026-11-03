@@ -676,6 +676,7 @@ pub fn ov_screen_pda_template_open(c: &mut Cpu) {
 /// `void GameUI_OpenFinishScreen(void)` (0x20cc60): open the finish screen that
 /// matches the current race mode and player count.
 pub fn game_ui_open_finish_screen(c: &mut Cpu) {
+    crate::custom_finish_trace::observe(c, "finish-screen-enter", 0, 0);
     guest(c, |c| {
         c.cycles += 13;
         let frame = Frame::open(c, 0x10);
@@ -717,13 +718,17 @@ pub fn game_ui_open_finish_screen(c: &mut Cpu) {
             1 => {
                 c.cycles += 4;
                 c.g[A0][0] = 0xc;
+                crate::custom_finish_trace::observe(c, "finish-screen-request", 0, 0xc);
                 callee::GAME_UI_OPEN_SCREEN.call(c, 0x0020_cca4)?;
+                crate::custom_finish_trace::observe(c, "finish-screen-returned", 0, 0xc);
                 frame.restore_ra(c, 0);
             }
             3 => {
                 c.cycles += 4;
                 c.g[A0][0] = 0xd;
+                crate::custom_finish_trace::observe(c, "finish-screen-request", 0, 0xd);
                 callee::GAME_UI_OPEN_SCREEN.call(c, 0x0020_ccc8)?;
+                crate::custom_finish_trace::observe(c, "finish-screen-returned", 0, 0xd);
                 frame.restore_ra(c, 0);
             }
             _ => {
@@ -731,10 +736,13 @@ pub fn game_ui_open_finish_screen(c: &mut Cpu) {
                 if c.g[V1][0] != c.g[V0][0] {
                     c.cycles += 2;
                     c.g[A0][0] = 0xc;
+                    crate::custom_finish_trace::observe(c, "finish-screen-request", 0, 0xc);
                     callee::GAME_UI_OPEN_SCREEN.call(c, 0x0020_cce8)?;
+                    crate::custom_finish_trace::observe(c, "finish-screen-returned", 0, 0xc);
                 } else {
                     c.cycles += 2;
                     Addr(gp_2(c, -0x9f4)).sw(c, c.g[A0][0]);
+                    crate::custom_finish_trace::observe(c, "finish-screen-freeride", 0, 2);
                 }
                 c.cycles += 1;
                 frame.restore_ra(c, 0);

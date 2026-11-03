@@ -19,6 +19,7 @@ fn r(c: &Cpu, register: usize) -> u32 {
 }
 
 pub fn on_rider_finished(c: &mut Cpu) {
+    crate::custom_finish_trace::observe(c, "rider-finished", 0, r(c, A1));
     guest(c, |c| {
         c.cycles += 35;
         let frame = Frame::open(c, 0x90);
@@ -48,6 +49,7 @@ pub fn on_rider_finished(c: &mut Cpu) {
         let handler = r(c, V0);
         c.g[A0][0] = sx(r(c, A2).wrapping_add(r(c, A0)));
         call_ptr(c, handler, 0x0023_83b8)?;
+        crate::custom_finish_trace::observe(c, "handler-returned", 0, handler);
         call_ptr(c, 0x0014_dc80, 0x0023_83c0)?;
         c.g[A0][0] = c.g[V0][0];
         c.g[A1][0] = 0;

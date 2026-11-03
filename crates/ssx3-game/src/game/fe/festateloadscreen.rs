@@ -694,6 +694,7 @@ pub fn c_fe_load_screen_render(c: &mut Cpu) {
 /// taken down by 1 per tick, so it is stored as
 /// [`crate::tick::ticks_from_frames60`]`(180)`.
 pub fn game_state_finish_enter(c: &mut Cpu) {
+    crate::custom_finish_trace::observe(c, "finish-enter", r32(c, A0), 0);
     guest(c, |c| {
         c.cycles += 25;
         let frame = Frame::open(c, 0x20);
@@ -718,6 +719,7 @@ pub fn game_state_finish_enter(c: &mut Cpu) {
         c.g[V0][0] = crate::tick::ticks_from_frames60(c, 180) as u64;
         Addr(p(r32(c, S0), 0x10)).sw(c, 0);
         Addr(p(r32(c, S0), 0x14)).sw(c, c.g[V0][0]);
+        crate::custom_finish_trace::observe(c, "finish-delay-armed", r32(c, S0), 0);
         c.g[A1][0] = 0x4;
         c.g[V0][0] = Addr(gp(c, -0x848)).lw(c);
         c.g[V1][0] = Addr(p(r32(c, V0), 0x84)).lw(c);
