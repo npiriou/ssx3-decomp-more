@@ -16,7 +16,7 @@ JUMP_FALSE = -4
 def calls_blob(calls):
     """Compile (builtin_id, [(parameter_index, bits, type), ...]) calls.
 
-    Types 1/2 are integer/float. Luno literal instructions push the native
+    Types 1/2/3 are integer/float/resource ID. Luno literal instructions push the native
     16-byte named argument records; opcode 0x21 consumes them and stores the
     result in register two. Registers zero/one are reserved for the native
     receiver/default argument: LunoVM_Call always initializes both, even in
@@ -51,9 +51,9 @@ def calls_blob(calls):
             raise ValueError("Luno builtin/argument count exceeds instruction fields")
         maximum = max(maximum, len(arguments))
         for index, bits, kind in arguments:
-            if not 0 <= index < 256 or kind not in (1, 2):
+            if not 0 <= index < 256 or kind not in (1, 2, 3):
                 raise ValueError("unsupported Luno named scalar argument")
-            code.extend(((0x26 if kind == 2 else 0x25) | (index << 8), bits))
+            code.extend(((0x24 + kind) | (index << 8), bits))
         code.append(0x21 | (2 << 8) | (builtin << 16) | (len(arguments) << 24))
         if builtin == 116 or conditional:
             # Native opcode 2 branches on a false scalar. Its high word is

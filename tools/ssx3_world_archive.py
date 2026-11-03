@@ -38,7 +38,7 @@ def _align(value: int, alignment: int) -> int:
     return (value + alignment - 1) & ~(alignment - 1)
 
 
-def pack_bigf(members: list[tuple[str, bytes]]) -> bytes:
+def pack_bigf(members: list[tuple[str, bytes]], *, header_limit=2048) -> bytes:
     """Build a BIGF container with 2048-byte member alignment."""
     if not members or len(members) > 1024:
         raise ValueError("BIGF needs 1..1024 members")
@@ -46,8 +46,8 @@ def pack_bigf(members: list[tuple[str, bytes]]) -> bytes:
     if any(not name or b"\0" in name for name in names) or len(set(names)) != len(names):
         raise ValueError("BIGF member names must be unique ASCII strings")
     header_size = 16 + sum(8 + len(name) + 1 for name in names)
-    if header_size > 2048:
-        raise ValueError("BIGF member table exceeds one sector")
+    if header_size > header_limit:
+        raise ValueError("BIGF member table exceeds its header limit")
     out = bytearray(_align(header_size, 2048))
     table = bytearray()
     for (name, data), encoded_name in zip(members, names):

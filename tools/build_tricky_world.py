@@ -39,6 +39,7 @@ from tricky_gameplay import pack_gameplay
 from tricky_object_effects import (pack_object_scripts, source_pickups,
                                   mode_hidden_instances, read_logic)
 from tricky_race_settings import showoff_catalog
+from tricky_audio import object_sounds
 
 
 def _verify_disc(iso: Path, serial: bytes, label: str) -> None:
@@ -93,6 +94,7 @@ def build(SSX3_iso: Path, tricky_iso: Path, output: Path, *,
     pbd = parse_pbd(pbd_data, True)
     models = parse_prefabs(pbd_data, pbd["counts"], pbd["offsets"])
     ssf_data = read_cofb_member(tricky_archive, f"data/models/{stem}.ssf")
+    _, sound_ids, sound_summary = object_sounds(SSX3_iso, tricky_iso, selected.code, ssf_data)
     collision_data = parse_ssf(ssf_data)
     spatial = parse_ltg(read_cofb_member(tricky_archive, f"data/models/{stem}.ltg"),
                         pbd["counts"], True)
@@ -189,7 +191,7 @@ def build(SSX3_iso: Path, tricky_iso: Path, output: Path, *,
     object_summary = pack_object_scripts(
         ssf_data, pbd, models, collision_data, race_instances, source_to_instance,
         interactives, section_id, mode, particle_sprites=particle_sprites,
-        force_leases=contact_volumes, initial_hidden=mode_dynamic_hidden)
+        force_leases=contact_volumes, initial_hidden=mode_dynamic_hidden, sound_ids=sound_ids)
     if max(texture_ids, default=-1) + texture_base > 32767:
         raise FormatError("Garibaldi texture IDs exceed the SSX 3 format")
     leaf = bytearray()
@@ -363,6 +365,7 @@ def build(SSX3_iso: Path, tricky_iso: Path, output: Path, *,
         "mode": mode, "source_archive": selected.archive,
         **gameplay_summary,
         **object_summary,
+        "source_object_sound_bank": sound_summary,
         **particle_sprites.summary(),
         "source_paths": "SOP" if mode == "freestyle" else "AIP",
         "source_timing": timing,

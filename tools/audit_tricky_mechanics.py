@@ -41,7 +41,7 @@ def mechanic(node: dict) -> str | None:
         return PROPERTY_TYPES.get(sub)
     if main == 2:
         return "spline_mover" if sub == 1 else "particles"
-    return {13: "scripted_reset", 16: "time_pickup", 24: "teleport",
+    return {8: "object_sound", 13: "scripted_reset", 16: "time_pickup", 24: "teleport",
             25: "rail_switch"}.get(main)
 
 
@@ -103,6 +103,10 @@ def audit(course, iso: Path, overlay: Path) -> dict:
                     for mode, report in native.items()}
     force_nodes = {mode: {tuple(row) for row in report.get("source_force_lease_nodes", [])}
                    for mode, report in native.items()}
+    sound_nodes = {mode: {(row[0], row[1]) for row in report.get("source_object_sound_nodes", [])}
+                   for mode, report in native.items()}
+    empty_sounds = {mode: {(row[0], row[1]) for row in report.get("source_empty_object_sound_nodes", [])}
+                    for mode, report in native.items()}
 
     # ActOnInstance names an effect header on another instance, not a slot.
     # Collision roots alone miss sewer gates, falling trees and wall fragments.
@@ -177,6 +181,10 @@ def audit(course, iso: Path, overlay: Path) -> dict:
                         status = "native_flag_wind_response"
                     elif kind == "spline_mover" and (target, node["offset"]) in spline_nodes.get(mode, set()):
                         status = "native_detached_spline_copies"
+                    elif kind == "object_sound" and (target, node["offset"]) in sound_nodes.get(mode, set()):
+                        status = "native_object_voice_with_source_sample"
+                    elif kind == "object_sound" and (target, node["offset"]) in empty_sounds.get(mode, set()):
+                        status = "authored_empty_sound_slot"
                     elif manifest is None:
                         status = "unprepared"
                     elif kind == "roller_response":

@@ -28,6 +28,10 @@ def main() -> None:
     parser.add_argument("--worlds-only", action="store_true")
     parser.add_argument("--ui-only", action="store_true")
     args = parser.parse_args()
+    if not args.ui_only:
+        from tricky_audio import prepare as prepare_audio
+        reports = prepare_audio(args.ssx3_iso, args.tricky_iso, args.overlay)
+        print(f"Prepared {len(reports)} native object-sound banks", flush=True)
     sources = sorted(Path(__file__).parent.glob("ssx3_*.py")) + sorted(Path(__file__).parent.glob("tricky_*.py"))
     sources = [p for p in sources if p.name not in ("ssx3_bonus_menu.py", "tricky_ui_assets.py")]
     sources += [Path(__file__).with_name("build_tricky_world.py")]

@@ -93,6 +93,7 @@ enum Loc {
 
 struct State {
     src: Source,
+    audio_banks: Option<crate::custom_audio_banks::AudioBanks>,
     files: Vec<Option<OpenFile>>,
     /// Name lookups (upper-case path -> disc entry), cached.
     found: HashMap<String, Option<(u32, u32)>>,
@@ -194,8 +195,14 @@ pub fn install() -> bool {
         _ => 1500,
     };
     crate::custom_tracks::set_world_texture_slots(texture_slots);
+    let audio_banks = match &src {
+        Source::Overlay { dir, .. } | Source::Dir(dir) if custom_assets =>
+            crate::custom_audio_banks::AudioBanks::open(dir),
+        _ => None,
+    };
     *STATE.lock().unwrap() = Some(State {
         src,
+        audio_banks,
         files: Vec::new(),
         found: HashMap::new(),
         pending: None,
@@ -344,7 +351,7 @@ impl State {
         let Some(Some(f)) = self.files.get_mut(idx) else {
             return false;
         };
-        match (&mut f.loc, &mut self.src) {
+        let read = match (&mut f.loc, &mut self.src) {
             (Loc::Sector(s), Source::Iso(disc) | Source::Overlay { disc, .. }) => {
                 // Whole sectors around [off, off + len).
                 let first = off / 2048;
@@ -358,7 +365,8 @@ impl State {
                 file.seek(SeekFrom::Start(off as u64)).is_ok() && file.read_exact(out).is_ok()
             }
             _ => false,
-        }
+        };
+        read && self.audio_banks.as_mut().is_none_or(|audio| audio.apply(&f.name, off, out))
     }
 }
 

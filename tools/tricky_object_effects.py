@@ -154,12 +154,14 @@ def source_pickups(ssf, collision, instances):
 
 def pack_object_scripts(ssf, pbd, models, collision, instances, source_to_instance,
                            interactives, section, mode, *, particle_sprites, force_leases=(),
-                           initial_hidden=()):
+                           initial_hidden=(), sound_ids):
     slots, chains, functions = read_logic(ssf)
     selected = set(instances)
     records = {}
     static_animation_nodes = set()
     animation_debounce_nodes = set()
+    sound_nodes = set()
+    empty_sound_nodes = set()
     roots = {}
     animation_kinds = {}
     resets = set()
@@ -547,6 +549,16 @@ def pack_object_scripts(ssf, pbd, models, collision, instances, source_to_instan
                 commands.append((13, [(i, value, 1 if i < 2 else 2)
                                       for i, value in enumerate(params)]))
                 fragments.add(owner)
+            elif main == 8:
+                sound = words[0]
+                if sound not in sound_ids:
+                    raise FormatError("object sound is absent from the prepared bank")
+                native = sound_ids[sound]
+                if native is None:
+                    empty_sound_nodes.add((owner, node["offset"], sound))
+                else:
+                    commands.append((30, [(0, instance_rid(owner), 1), (1, native, 3)]))
+                    sound_nodes.add((owner, node["offset"], sound, native))
             elif main == 0 and words[0] == 2:
                 if len(words) != 2 or not math.isfinite(float_value(words[1])):
                     raise FormatError("invalid Tricky debounce duration")
@@ -688,10 +700,10 @@ def pack_object_scripts(ssf, pbd, models, collision, instances, source_to_instan
         # instead of letting native default cleanup restore its static flags.
         roots[owner, 1] = [(2, [(0, instance_rid(owner), 1), (1, 3, 1)])]
         roots.setdefault((owner, 3), [])
-    # Do not schedule loops consisting only of unimplemented sounds/emitters.
+    # Sound-only continuations have native work now; authored no-ops do not.
     # Keep every continuation which reaches a supported action, including
     # through other continuations; remove only code with no native consumer.
-    meaningful = {1, 2, 3, 4, 5, 9, 13, 21, 22, 25, 28, 111, 112, 119, 122, 123, 124, 125, 126, 127, 128, 129, 130, 131, 132, 133}
+    meaningful = {1, 2, 3, 4, 5, 9, 13, 21, 22, 25, 28, 30, 111, 112, 119, 122, 123, 124, 125, 126, 127, 128, 129, 130, 131, 132, 133}
 
     def action(call):
         builtin, args = call
@@ -771,6 +783,8 @@ def pack_object_scripts(ssf, pbd, models, collision, instances, source_to_instan
             "native_combo_animations": sum(kind == 258 for kind in records.values()),
             "source_static_animation_nodes": sorted(static_animation_nodes),
             "source_animation_debounce_nodes": sorted(animation_debounce_nodes),
+            "source_object_sound_nodes": sorted(sound_nodes),
+            "source_empty_object_sound_nodes": sorted(empty_sound_nodes),
             "native_scripted_resets": len(resets),
             "source_reset_instances": sorted(resets),
             "native_mesh_break_animations": len(fragments),
