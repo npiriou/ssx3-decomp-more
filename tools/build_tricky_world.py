@@ -247,6 +247,7 @@ def build(SSX3_iso: Path, tricky_iso: Path, output: Path, *,
                                        **properties})
     emitter_hosts = [(owner, rid, False) for owner, rid in interactives.emitter_anchors.items()]
     emitter_hosts += [(owner, rid, True) for owner, rid in interactives.collision_emitter_anchors.items()]
+    emitter_hosts += [(owner, rid, False) for owner, rid in interactives.spline_anchors.items()]
     for owner, rid, world_space in sorted(emitter_hosts, key=lambda host: host[1]):
         instance = pbd["instances"][owner]
         if world_space:

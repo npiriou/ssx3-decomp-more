@@ -100,6 +100,7 @@ class NativeInteractives:
         self.object_bindings = {}
         self.emitter_anchors = {}
         self.collision_emitter_anchors = {}
+        self.spline_anchors = {}
         self.contact_only_instances = set()
         self.rail_initial = {}
         self.functions = []
@@ -273,8 +274,17 @@ class NativeInteractives:
         anchors = self.collision_emitter_anchors if collision else self.emitter_anchors
         if owner not in anchors:
             anchors[owner] = (instance_count + len(self.posts)
-                              + len(self.emitter_anchors) + len(self.collision_emitter_anchors))
+                              + len(self.emitter_anchors) + len(self.collision_emitter_anchors)
+                              + len(self.spline_anchors))
         return (anchors[owner] << 8) | self.section
+
+    def spline_anchor(self, owner, instance_count):
+        """Reserve an independent model host alongside the detached emitters."""
+        if owner not in self.spline_anchors:
+            self.spline_anchors[owner] = (instance_count + len(self.posts)
+                + len(self.emitter_anchors) + len(self.collision_emitter_anchors)
+                + len(self.spline_anchors))
+        return (self.spline_anchors[owner] << 8) | self.section
 
     def reserve_function(self):
         """Reserve a stable RID before compiling recursive graph references."""

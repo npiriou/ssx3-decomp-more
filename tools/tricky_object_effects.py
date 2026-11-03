@@ -141,6 +141,8 @@ def pack_object_scripts(ssf, pbd, models, collision, instances, source_to_instan
     fence_owners = set()
     flag_nodes = set()
     flag_configs = {}
+    spline_nodes = set()
+    spline_configs = {}
     initial_debounce = set()
     cracked_nodes = set()
     cracked_configs = {}
@@ -309,6 +311,26 @@ def pack_object_scripts(ssf, pbd, models, collision, instances, source_to_instan
                         commands.append((118, []))
             elif owner in interactives.replacements:
                 continue
+            elif main == 2 and words[0] == 1:
+                if (len(words) != 12 or words[1] >= len(pbd["splines"])
+                        or words[2:4] != (1, 1) or not 1 <= words[4] <= 64
+                        or words[7] not in (0, 1)
+                        or not all(math.isfinite(float_value(v)) for v in (*words[5:7], *words[8:]))):
+                    raise FormatError("unsupported Tricky spline-copy parameters")
+                anchor = interactives.spline_anchor(owner, len(instances))
+                # Source EndMode1 wraps; Orientation1 follows horizontal yaw
+                # while keeping chairs level. Native MultiSpline mode2 does
+                # the same. Source speed is metres/second; native SetSpeed
+                # multiplies km/h by100000/3600. Source also adds pi/2 to its
+                # yaw in radians; native accepts an offset in degrees.
+                yaw = struct.unpack("<I", struct.pack("<f", 90 + math.degrees(float_value(words[6]))))[0]
+                speed = struct.unpack("<I", struct.pack("<f", float_value(words[5]) * 3.6))[0]
+                params = [anchor, (words[1] << 8) | section, 2, speed, yaw, 0,
+                          *words[8:], words[7], words[4], instance_rid(owner)]
+                commands.append((131, [(i, value, 1 if i in (0, 1, 2, 10, 11, 12) else 2)
+                                       for i, value in enumerate(params)]))
+                spline_nodes.add((owner, node["offset"]))
+                spline_configs[owner] = list(words[1:])
             elif main == 2 and words[0] in (0, 2):
                 if len(words) != 52 or not all(math.isfinite(float_value(v)) for v in words[3:50]):
                     raise FormatError("invalid Tricky emitter parameters")
@@ -591,7 +613,7 @@ def pack_object_scripts(ssf, pbd, models, collision, instances, source_to_instan
     # Do not schedule loops consisting only of unimplemented sounds/emitters.
     # Keep every continuation which reaches a supported action, including
     # through other continuations; remove only code with no native consumer.
-    meaningful = {1, 2, 3, 4, 5, 9, 13, 21, 22, 25, 28, 111, 112, 119, 122, 123, 124, 125, 126, 127, 128, 129, 130}
+    meaningful = {1, 2, 3, 4, 5, 9, 13, 21, 22, 25, 28, 111, 112, 119, 122, 123, 124, 125, 126, 127, 128, 129, 130, 131}
 
     def action(call):
         builtin, args = call
@@ -692,6 +714,9 @@ def pack_object_scripts(ssf, pbd, models, collision, instances, source_to_instan
             "source_fence_nodes": sorted(fence_nodes),
             "source_flag_nodes": sorted(flag_nodes),
             "source_flag_configs": [[owner, *config] for owner, config in sorted(flag_configs.items())],
+            "source_spline_nodes": sorted(spline_nodes),
+            "source_spline_configs": [[owner, *config] for owner, config in sorted(spline_configs.items())],
+            "native_spline_anchors": [[owner, rid] for owner, rid in interactives.spline_anchors.items()],
             "source_fence_neighbours": [[owner, pbd["instances"][owner]["next"],
                                          pbd["instances"][owner]["previous"]]
                                         for owner in sorted(fence_owners)],
