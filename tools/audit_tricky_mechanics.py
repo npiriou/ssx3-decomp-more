@@ -97,6 +97,8 @@ def audit(course, iso: Path, overlay: Path) -> dict:
                   for mode, report in native.items()}
     spline_nodes = {mode: {tuple(row) for row in report.get("source_spline_nodes", [])}
                     for mode, report in native.items()}
+    force_nodes = {mode: {tuple(row) for row in report.get("source_force_lease_nodes", [])}
+                   for mode, report in native.items()}
 
     # ActOnInstance names an effect header on another instance, not a slot.
     # Collision roots alone miss sewer gates, falling trees and wall fragments.
@@ -136,7 +138,9 @@ def audit(course, iso: Path, overlay: Path) -> dict:
                     if owner in replacements or target in replacements:
                         status = "native_replacement"
                     elif manifest and kind in PUSHES and target in boost_ids[mode]:
-                        status = "native_volume"
+                        status = ("native_volume_with_shared_contact_lifetime"
+                                  if (target, node["offset"]) in force_nodes.get(mode, set())
+                                  else "native_volume")
                     elif kind == "scripted_reset" and target in reset_ids.get(mode, set()):
                         status = "native_contact_script"
                     elif kind in ("object_animation", "delta_animation", "combo_animation") and target in animated_ids.get(mode, set()):

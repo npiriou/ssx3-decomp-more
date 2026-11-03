@@ -99,7 +99,7 @@ fn teleport_frame(c: &mut Cpu, index: i32, matrix: u32) -> bool {
 /// output is initialized first, so the VM's existing unwind continuation is
 /// also valid if the native action yields.
 pub fn builtin(c: &mut Cpu, id: u32, back: u32) -> Option<Flow> {
-    if !(111..=131).contains(&id) {
+    if !(111..=132).contains(&id) {
         return None;
     }
     let out = c.g[A0][0] as u32;
@@ -108,6 +108,7 @@ pub fn builtin(c: &mut Cpu, id: u32, back: u32) -> Option<Flow> {
     // Their retail function-table entries are empty; do not fall through to
     // a null native target if a late callback sees an inactive course.
     if crate::custom_tracks::active().is_none() { return Some(Ok(())) }
+    if id == 132 { return Some(crate::custom_force_overlap::begin(c, back)); }
     if id == 131 { return Some(crate::custom_spline_movers::begin(c, back)); }
     if id == 130 { return Some(crate::custom_flags::begin(c, back)); }
     if id == 129 { crate::custom_fences::register(c); return Some(Ok(())); }
@@ -201,6 +202,7 @@ pub fn builtin(c: &mut Cpu, id: u32, back: u32) -> Option<Flow> {
 /// Priming both distance fields prevents a teleport from collecting the time
 /// gates/splits along the skipped section of the old path.
 pub fn after_builtin(c: &mut Cpu, id: u32, back: u32) -> Flow {
+    if id == 132 { return crate::custom_force_overlap::after(c, back) }
     if id == 131 { return crate::custom_spline_movers::after(c, back) }
     if id == 128 { return crate::custom_fences::after(c, back) }
     if id == 127 { return crate::custom_collision_emitters::after(c) }

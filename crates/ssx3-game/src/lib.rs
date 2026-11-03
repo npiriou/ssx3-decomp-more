@@ -43,6 +43,7 @@ mod custom_collision_emitters;
 mod custom_fences;
 mod custom_flags;
 mod custom_spline_movers;
+mod custom_force_overlap;
 mod custom_rail_diagnostics;
 mod custom_contact_trace;
 pub mod custom_rail_rules;

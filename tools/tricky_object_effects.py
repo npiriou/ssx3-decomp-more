@@ -119,7 +119,7 @@ def source_pickups(ssf, collision, instances):
 
 
 def pack_object_scripts(ssf, pbd, models, collision, instances, source_to_instance,
-                           interactives, section, mode, *, particle_sprites):
+                           interactives, section, mode, *, particle_sprites, force_leases=()):
     slots, chains, functions = read_logic(ssf)
     selected = set(instances)
     records = {}
@@ -143,6 +143,8 @@ def pack_object_scripts(ssf, pbd, models, collision, instances, source_to_instan
     flag_configs = {}
     spline_nodes = set()
     spline_configs = {}
+    force_nodes = set()
+    force_monitors = {}
     initial_debounce = set()
     cracked_nodes = set()
     cracked_configs = {}
@@ -398,6 +400,26 @@ def pack_object_scripts(ssf, pbd, models, collision, instances, source_to_instan
                                      (1, words[1] if words[1] else 0xffffffff, 1)]))
                 counters[owner] = (words[1], words[2])
                 receiver_kinds[owner] = 6
+            elif main == 0 and words[0] == 7 and owner in force_leases:
+                if len(words) != 8 or words[:3] != (7, 1, 0) or owner != root or native_slot != 2:
+                    raise FormatError("unsupported shared Tricky force ownership")
+                key = owner, node["offset"]
+                rid = instance_rid(owner)
+                if key not in force_monitors:
+                    function = interactives.reserve_function()
+                    force_monitors[key] = function
+                    end = ("force-monitor-end", *key)
+                    # Source mode1 lives while any rider's collision hull
+                    # intersects the volume. Native queries supply that exact
+                    # contact, rather than a position/radius approximation.
+                    # A zero-delay deferred job runs next update, not now.
+                    again = (115, [(0, function, 1), (1, rid, 1), (2, 0, 2),
+                                   (3, rid, 1), (4, 2, 1), (5, 1, 1)])
+                    tasks[function] = [(132, [(0, rid, 1)]), (JUMP_FALSE, end),
+                                       again, (LABEL, end)]
+                commands.append((115, [(0, force_monitors[key], 1), (1, rid, 1),
+                                       (2, 0, 2), (3, rid, 1), (4, 2, 1), (5, 1, 1)]))
+                force_nodes.add(key)
             elif main == 0 and words[0] == 12:
                 if len(words) != 3 or words[1] not in (0, 1) or not math.isfinite(float_value(words[2])):
                     raise FormatError("invalid Tricky fence parameters")
@@ -613,7 +635,7 @@ def pack_object_scripts(ssf, pbd, models, collision, instances, source_to_instan
     # Do not schedule loops consisting only of unimplemented sounds/emitters.
     # Keep every continuation which reaches a supported action, including
     # through other continuations; remove only code with no native consumer.
-    meaningful = {1, 2, 3, 4, 5, 9, 13, 21, 22, 25, 28, 111, 112, 119, 122, 123, 124, 125, 126, 127, 128, 129, 130, 131}
+    meaningful = {1, 2, 3, 4, 5, 9, 13, 21, 22, 25, 28, 111, 112, 119, 122, 123, 124, 125, 126, 127, 128, 129, 130, 131, 132}
 
     def action(call):
         builtin, args = call
@@ -715,6 +737,9 @@ def pack_object_scripts(ssf, pbd, models, collision, instances, source_to_instan
             "source_flag_nodes": sorted(flag_nodes),
             "source_flag_configs": [[owner, *config] for owner, config in sorted(flag_configs.items())],
             "source_spline_nodes": sorted(spline_nodes),
+            "source_force_lease_nodes": sorted(force_nodes),
+            "native_force_monitors": [[owner, offset, rid]
+                                      for (owner, offset), rid in sorted(force_monitors.items())],
             "source_spline_configs": [[owner, *config] for owner, config in sorted(spline_configs.items())],
             "native_spline_anchors": [[owner, rid] for owner, rid in interactives.spline_anchors.items()],
             "source_fence_neighbours": [[owner, pbd["instances"][owner]["next"],

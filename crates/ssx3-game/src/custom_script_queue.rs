@@ -56,6 +56,7 @@ pub fn restart() {
     crate::custom_cracked_glass::restart();
     crate::custom_collision_emitters::restart();
     crate::custom_spline_movers::restart();
+    crate::custom_force_overlap::restart();
     *QUEUE.lock().unwrap() = Queue::default();
 }
 

@@ -119,19 +119,30 @@ def build(SSX3_iso: Path, tricky_iso: Path, output: Path, *,
         main_route = tuple(range(finishes[0] + 1))
     # Some invisible force volumes also own focus effects (Tokyo air shafts).
     # Keep those owners; pack_world_script retains their cleared visible bit.
-    # Forces themselves remain in TFX2, without a second script receiver.
-    # Contact-only force owners still need the source force-node lifetime:
-    # importing their naked contact graph would repeatedly spawn effects
-    # while the rider stays inside (Alaska's fireworks trigger is one).
-    slots, _, _ = read_logic(ssf_data)
+    # Forces remain in TFX2. A mode1/zero-duration force with further contact
+    # actions also needs its source shared ownership until every rider leaves.
+    slots, effect_chains, _ = read_logic(ssf_data)
     boost_instances = set(gameplay_summary["source_boost_instances"])
     focus_volumes = set()
+    contact_volumes = set()
     for index in boost_instances:
         prop = collision_data["properties"][collision_data["instance_properties"][index]]
         if prop["effect_slot"] >= 0 and slots[prop["effect_slot"]][0] >= 0:
             focus_volumes.add(index)
+        if prop["effect_slot"] >= 0:
+            chain = slots[prop["effect_slot"]][1]
+            nodes = effect_chains[chain] if chain >= 0 else []
+            if nodes:
+                first = nodes[0]
+                words = first["words"]
+                if (first["main"] == 0 and len(words) == 8 and words[:3] == (7, 1, 0)
+                        and len(nodes) > 1 and prop["collision_mode"] == 2
+                        and prop["surface"] == -1
+                        and len(models[pbd["instances"][index]["model_id"]]["objects"]) == 1):
+                    contact_volumes.add(index)
     race_instances = [index for index in race_instances if index not in boost_instances
                       or index in focus_volumes
+                      or index in contact_volumes
                       or collision_data["properties"][collision_data["instance_properties"][index]]["flags"] & 1]
     interactives = NativeInteractives(
         ssb, streams, locations,
@@ -177,7 +188,8 @@ def build(SSX3_iso: Path, tricky_iso: Path, output: Path, *,
     particle_sprites = ParticleSprites(tricky_iso, texture_base + max(texture_ids, default=-1) + 1)
     object_summary = pack_object_scripts(
         ssf_data, pbd, models, collision_data, race_instances, source_to_instance,
-        interactives, section_id, mode, particle_sprites=particle_sprites)
+        interactives, section_id, mode, particle_sprites=particle_sprites,
+        force_leases=contact_volumes)
     if max(texture_ids, default=-1) + texture_base > 32767:
         raise FormatError("Garibaldi texture IDs exceed the SSX 3 format")
     leaf = bytearray()
@@ -373,6 +385,7 @@ def build(SSX3_iso: Path, tricky_iso: Path, output: Path, *,
         "source_mode_hidden_instances": sorted(mode_hidden),
         "source_mode_hidden_dynamic_targets": sorted(mode_dynamic_hidden),
         "source_force_focus_instances": sorted(focus_volumes),
+        "source_force_contact_instances": sorted(contact_volumes),
         "instance_count": len(race_instances) + len(interactives.posts) + len(emitter_hosts),
         **interactives.summary(),
         "collision_count": physics_base + len(collision_data["physics"]),

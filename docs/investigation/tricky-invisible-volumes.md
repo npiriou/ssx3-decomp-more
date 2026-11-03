@@ -22,7 +22,7 @@ emitter. Native property serialization retains visibility0, contact flags2
 and surface-1. The lift descriptor remains in TFX2; Main0/Sub18 still does
 not create another force in the Luno compiler.
 
-## Alaska contact ownership remains pending
+## Alaska shared contact ownership
 
 Owner794 (`Mdl_ForceWind_5000`) has no focus binding. Its contact chain102
 creates Main0/Sub7, mode1, duration0, before launching emitter children on
@@ -38,11 +38,15 @@ no-op13b7b0. Thus an existing receiver consumes later contacts without
 recreating the graph. The source ELF has no direct call from this force
 receiver to WorldObj's contact-script method13aaf8.
 
-The TFX2 adapter currently applies the force without constructing that
-receiver. Restoring the naked native contact script would therefore create
-repeated bursts while a rider remains inside. Contact-only invisible force
-owners stay excluded until their source ownership is represented. No
-arbitrary cooldown, repeated-effect timer or force tuning was introduced.
+The TFX2 adapter applies the force without constructing that receiver. The
+importer now retains the contact owner and represents its shared lifetime
+through the existing deferred graph/busy scope. The first contact schedules
+one monitor and launches the three authored emitter children; further
+contacts are rejected by the ordinary scope guard. The monitor uses native
+rider collision hulls and the transformed mode2 box. It rearms the contact
+only after no active rider has positive penetration. No arbitrary cooldown,
+repeated-effect timer or force tuning was introduced. The detailed contract
+and remaining runtime evidence are in `tricky-force-ownership.md`.
 
 ## Existing native ModObj contacts
 
