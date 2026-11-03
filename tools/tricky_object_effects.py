@@ -137,6 +137,8 @@ def pack_object_scripts(ssf, pbd, models, collision, instances, source_to_instan
     pop_bursts = set()
     emitter_nodes = set()
     collision_emitter_nodes = set()
+    fence_nodes = set()
+    fence_owners = set()
     initial_debounce = set()
     cracked_nodes = set()
     cracked_configs = {}
@@ -372,6 +374,13 @@ def pack_object_scripts(ssf, pbd, models, collision, instances, source_to_instan
                                      (1, words[1] if words[1] else 0xffffffff, 1)]))
                 counters[owner] = (words[1], words[2])
                 receiver_kinds[owner] = 6
+            elif main == 0 and words[0] == 12:
+                if len(words) != 3 or words[1] not in (0, 1) or not math.isfinite(float_value(words[2])):
+                    raise FormatError("invalid Tricky fence parameters")
+                commands.append((128, [(0, instance_rid(owner), 1),
+                                       (1, words[1], 1), (2, words[2], 2)]))
+                fence_nodes.add((owner, node["offset"]))
+                fence_owners.add(owner)
             elif main == 0 and words[0] == 14:
                 if len(words) != 3 or not all(math.isfinite(float_value(v)) for v in words[1:]):
                     raise FormatError("invalid Tricky cracked-glass parameters")
@@ -555,7 +564,7 @@ def pack_object_scripts(ssf, pbd, models, collision, instances, source_to_instan
     # Do not schedule loops consisting only of unimplemented sounds/emitters.
     # Keep every continuation which reaches a supported action, including
     # through other continuations; remove only code with no native consumer.
-    meaningful = {1, 2, 3, 4, 5, 9, 13, 21, 22, 25, 28, 111, 112, 119, 122, 123, 124, 125, 126, 127}
+    meaningful = {1, 2, 3, 4, 5, 9, 13, 21, 22, 25, 28, 111, 112, 119, 122, 123, 124, 125, 126, 127, 128, 129}
 
     def action(call):
         builtin, args = call
@@ -578,6 +587,15 @@ def pack_object_scripts(ssf, pbd, models, collision, instances, source_to_instan
     for rid, calls in tasks.items():
         interactives.define_function(rid, calls_blob(supported(calls)))
     roots = {key: supported(calls) for key, calls in roots.items()}
+    # Native Fence initialization clears its neighbour pointers. Register the
+    # authored links at focus entry without constructing a moving actor there.
+    # First contact creates the Fence; native propagation can create neighbours.
+    for owner in sorted(fence_owners):
+        source = pbd["instances"][owner]
+        neighbour = lambda key: instance_rid(source[key]) if source[key] in selected else 0xffffffff
+        roots.setdefault((owner, 1), []).insert(0, (129, [
+            (0, instance_rid(owner), 1), (1, neighbour("next"), 1),
+            (2, neighbour("previous"), 1)]))
     # A populated leave/end slot, even an empty source graph, suppresses
     # native default teardown. Preserve that latch independently of whether
     # all its visual consumers are available yet (e.g. Pipedream fireworks).
@@ -644,6 +662,10 @@ def pack_object_scripts(ssf, pbd, models, collision, instances, source_to_instan
             "source_pop_burst_nodes": sorted(pop_bursts),
             "source_emitter_nodes": sorted(emitter_nodes),
             "source_collision_emitter_nodes": sorted(collision_emitter_nodes),
+            "source_fence_nodes": sorted(fence_nodes),
+            "source_fence_neighbours": [[owner, pbd["instances"][owner]["next"],
+                                         pbd["instances"][owner]["previous"]]
+                                        for owner in sorted(fence_owners)],
             "source_contact_only_instances": sorted(interactives.contact_only_instances),
             "source_non_bouncing_breakables": sorted(break_through),
             "native_emitter_anchors": [[owner, rid] for owner, rid in interactives.emitter_anchors.items()],

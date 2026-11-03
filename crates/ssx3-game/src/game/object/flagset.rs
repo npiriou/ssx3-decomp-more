@@ -1467,135 +1467,154 @@ pub fn fence_update(c: &mut Cpu) {
         f: ee::s11::f_0034cf98,
     };
     guest(c, |c| {
-        c.cycles += 7;
-        let frame = Frame::open(c, 0x20);
-        frame.save(c, S0, 0x10);
-        frame.save_ra(c, 0);
-        c.g[S0][0] = c.g[A0][0];
-        let fence = r32(c, S0);
+        let frame = Frame { size: 0x20 };
+        let mut pc = c.pc;
+        loop {
+            match pc {
+                0x0034_ce48 => {
+                    c.cycles += 7;
+                    Frame::open(c, 0x20);
+                    frame.save(c, S0, 0x10);
+                    frame.save_ra(c, 0);
+                    c.g[S0][0] = c.g[A0][0];
+                    let fence = r32(c, S0);
+                    crate::custom_fences::prepare(c, fence);
+                    // Neighbour delays.
+                    let left = Addr(fence).off(0x38).lw(c);
+                    c.g[V0][0] = sx((left as u32).wrapping_sub(1));
+                    if (left as i64) > 0 {
+                        c.cycles += 2;
+                        Addr(fence).off(0x38).sw(c, c.g[V0][0]);
+                        if c.g[V0][0] == 0 {
+                            c.cycles += 3;
+                            c.g[A1][0] = Addr(fence).off(0x104).lw(c);
+                            c.g[A2][0] = 1;
+                            PROPAGATE.call(c, 0x0034_ce78)?;
+                        }
+                    }
+                    pc = 0x0034_ce78;
+                }
+                0x0034_ce78 => {
+                    let fence = r32(c, S0);
+                    c.cycles += 3;
+                    let right = Addr(fence).off(0x3c).lw(c);
+                    c.g[V0][0] = sx((right as u32).wrapping_sub(1));
+                    if (right as i64) > 0 {
+                        c.cycles += 2;
+                        Addr(fence).off(0x3c).sw(c, c.g[V0][0]);
+                        if c.g[V0][0] == 0 {
+                            c.cycles += 4;
+                            c.g[A1][0] = Addr(fence).off(0x108).lw(c);
+                            c.g[A0][0] = c.g[S0][0];
+                            c.g[A2][0] = 0;
+                            PROPAGATE.call(c, 0x0034_ce9c)?;
+                        }
+                    }
+                    pc = 0x0034_ce9c;
+                }
+                0x0034_ce9c => {
+                    let fence = r32(c, S0);
+                    // Sway: angle += velocity.
+                    c.cycles += 10;
+                    c.lwc1(0, fence + 0x2c);
+                    c.g[V0][0] = sx(fence + 0x1c);
+                    c.lwc1(1, fence + 0x34);
+                    c.lwc1(2, fence + 0x30);
+                    c.lwc1(3, gp(c, -0x2ac8));
+                    if crate::tick::rate(c) == 60 {
+                        c.add_s(0, 0, 1);
+                    } else {
+                        let step = crate::game::ai::rider::rate_step_60(c, FpuF32(c.f[1]));
+                        c.f[0] = (FpuF32(c.f[0]) + step).0;
+                    }
+                    c.c_lt_s(2, 3);
+                    let small = c.fcc();
+                    c.swc1(0, fence + 0x2c);
+                    if small {
+                        c.cycles += 6;
+                        c.lwc1(0, r32(c, V0) + 0x10);
+                        c.abs_s(0, 0);
+                        c.c_lt_s(0, 3);
+                        c.g[A1][0] = 1;
+                        if c.fcc() {
+                            // Settled: put the fence to sleep.
+                            c.cycles += 7;
+                            c.g[V0][0] = Addr(fence).off(0xc).lw(c);
+                            c.g[A0][0] = Addr(r32(c, V0)).off(0x110).lh(c);
+                            c.g[V1][0] = Addr(r32(c, V0)).off(0x114).lw(c);
+                            c.g[A0][0] = sx(fence.wrapping_add(c.g[A0][0] as u32));
+                            call_ptr(c, r32(c, V1), 0x0034_cef0)?;
+                            pc = 0x0034_cef0;
+                            continue;
+                        }
+                    }
 
-        // Neighbour delays.
-        let left = Addr(fence).off(0x38).lw(c);
-        c.g[V0][0] = sx((left as u32).wrapping_sub(1));
-        if (left as i64) > 0 {
-            c.cycles += 2;
-            Addr(fence).off(0x38).sw(c, c.g[V0][0]);
-            if c.g[V0][0] == 0 {
-                c.cycles += 3;
-                c.g[A1][0] = Addr(fence).off(0x104).lw(c);
-                c.g[A2][0] = 1;
-                PROPAGATE.call(c, 0x0034_ce78)?;
-            }
-        }
-        c.cycles += 3;
-        let right = Addr(fence).off(0x3c).lw(c);
-        c.g[V0][0] = sx((right as u32).wrapping_sub(1));
-        if (right as i64) > 0 {
-            c.cycles += 2;
-            Addr(fence).off(0x3c).sw(c, c.g[V0][0]);
-            if c.g[V0][0] == 0 {
-                c.cycles += 4;
-                c.g[A1][0] = Addr(fence).off(0x108).lw(c);
-                c.g[A0][0] = c.g[S0][0];
-                c.g[A2][0] = 0;
-                PROPAGATE.call(c, 0x0034_ce9c)?;
-            }
-        }
+                    // Bounce at ±amplitude.
+                    c.cycles += 6;
+                    c.lwc1(1, fence + 0x34);
+                    c.mtc1(0, 0);
+                    c.c_le_s(0, 1);
+                    let mut bounced = false;
+                    if c.fcc() {
+                        // Moving up: clamp at +amplitude.
+                        c.cycles += 5;
+                        c.lwc1(0, fence + 0x2c);
+                        c.lwc1(1, fence + 0x30);
+                        c.c_le_s(1, 0);
+                        if c.fcc() {
+                            c.cycles += 9;
+                            c.g[AT][0] = 0x3f00_0000;
+                            c.mtc1(AT, 0);
+                            c.swc1(1, fence + 0x2c);
+                            c.mul_s(0, 1, 0);
+                            c.lwc1(2, gp(c, -0x2ac4));
+                            c.neg_s(1, 0);
+                            c.swc1(0, fence + 0x30);
+                            c.mul_s(1, 1, 2);
+                            bounced = true;
+                        }
+                    } else {
+                        // Moving down: clamp at -amplitude.
+                        c.lwc1(3, fence + 0x30);
+                        c.cycles += 5;
+                        c.lwc1(0, fence + 0x2c);
+                        c.neg_s(2, 3);
+                        c.c_le_s(0, 2);
+                        if c.fcc() {
+                            c.cycles += 7;
+                            c.g[AT][0] = 0x3f00_0000;
+                            c.mtc1(AT, 0);
+                            c.lwc1(1, gp(c, -0x2ac0));
+                            c.mul_s(0, 3, 0);
+                            c.swc1(2, fence + 0x2c);
+                            c.mul_s(1, 0, 1);
+                            c.swc1(0, fence + 0x30);
+                            bounced = true;
+                        }
+                    }
+                    if bounced {
+                        c.cycles += 1;
+                        c.swc1(1, fence + 0x34);
+                    }
 
-        // Sway: angle += velocity.
-        c.cycles += 10;
-        c.lwc1(0, fence + 0x2c);
-        c.g[V0][0] = sx(fence + 0x1c);
-        c.lwc1(1, fence + 0x34);
-        c.lwc1(2, fence + 0x30);
-        c.lwc1(3, gp(c, -0x2ac8));
-        if crate::tick::rate(c) == 60 {
-            c.add_s(0, 0, 1);
-        } else {
-            let step = crate::game::ai::rider::rate_step_60(c, FpuF32(c.f[1]));
-            c.f[0] = (FpuF32(c.f[0]) + step).0;
-        }
-        c.c_lt_s(2, 3);
-        let small = c.fcc();
-        c.swc1(0, fence + 0x2c);
-        if small {
-            c.cycles += 6;
-            c.lwc1(0, r32(c, V0) + 0x10);
-            c.abs_s(0, 0);
-            c.c_lt_s(0, 3);
-            c.g[A1][0] = 1;
-            if c.fcc() {
-                // Settled: put the fence to sleep.
-                c.cycles += 7;
-                c.g[V0][0] = Addr(fence).off(0xc).lw(c);
-                c.g[A0][0] = Addr(r32(c, V0)).off(0x110).lh(c);
-                c.g[V1][0] = Addr(r32(c, V0)).off(0x114).lw(c);
-                c.g[A0][0] = sx(fence.wrapping_add(c.g[A0][0] as u32));
-                call_ptr(c, r32(c, V1), 0x0034_cef0)?;
-                frame.restore(c, S0, 0x10);
-                c.cycles += 3;
-                frame.restore_ra(c, 0);
-                frame.close(c);
-                return Ok(());
+                    c.cycles += 3;
+                    c.g[A0][0] = c.g[S0][0];
+                    UPDATE_VERTS.call(c, 0x0034_cf84)?;
+                    pc = 0x0034_cf84;
+                }
+                0x0034_cef0 | 0x0034_cf84 => {
+                    frame.restore(c, S0, 0x10);
+                    c.cycles += 3;
+                    frame.restore_ra(c, 0);
+                    frame.close(c);
+                    return Ok(());
+                }
+                _ => {
+                    c.jump_out(pc, 0x0034_ce48, 0x0034_cf98);
+                    return Ok(());
+                }
             }
         }
-
-        // Bounce at ±amplitude.
-        c.cycles += 6;
-        c.lwc1(1, fence + 0x34);
-        c.mtc1(0, 0);
-        c.c_le_s(0, 1);
-        let mut bounced = false;
-        if c.fcc() {
-            // Moving up: clamp at +amplitude.
-            c.cycles += 5;
-            c.lwc1(0, fence + 0x2c);
-            c.lwc1(1, fence + 0x30);
-            c.c_le_s(1, 0);
-            if c.fcc() {
-                c.cycles += 9;
-                c.g[AT][0] = 0x3f00_0000;
-                c.mtc1(AT, 0);
-                c.swc1(1, fence + 0x2c);
-                c.mul_s(0, 1, 0);
-                c.lwc1(2, gp(c, -0x2ac4));
-                c.neg_s(1, 0);
-                c.swc1(0, fence + 0x30);
-                c.mul_s(1, 1, 2);
-                bounced = true;
-            }
-        } else {
-            // Moving down: clamp at -amplitude.
-            c.lwc1(3, fence + 0x30);
-            c.cycles += 5;
-            c.lwc1(0, fence + 0x2c);
-            c.neg_s(2, 3);
-            c.c_le_s(0, 2);
-            if c.fcc() {
-                c.cycles += 7;
-                c.g[AT][0] = 0x3f00_0000;
-                c.mtc1(AT, 0);
-                c.lwc1(1, gp(c, -0x2ac0));
-                c.mul_s(0, 3, 0);
-                c.swc1(2, fence + 0x2c);
-                c.mul_s(1, 0, 1);
-                c.swc1(0, fence + 0x30);
-                bounced = true;
-            }
-        }
-        if bounced {
-            c.cycles += 1;
-            c.swc1(1, fence + 0x34);
-        }
-
-        c.cycles += 3;
-        c.g[A0][0] = c.g[S0][0];
-        UPDATE_VERTS.call(c, 0x0034_cf84)?;
-        frame.restore(c, S0, 0x10);
-        c.cycles += 3;
-        frame.restore_ra(c, 0);
-        frame.close(c);
-        Ok(())
     });
 }
 
