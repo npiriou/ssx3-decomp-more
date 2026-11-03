@@ -44,6 +44,8 @@ struct App {
     fps_mark: Instant,
     /// Pad 1 buttons held on the keyboard / on a game controller (libpad bits).
     keys: u16,
+    /// I/J/K/L provide pad 1's left stick independently of the D-pad.
+    stick_keys: u8,
     gilrs: Option<gilrs::Gilrs>,
     /// Ticket of the previous frame's display request (MTGS): the window
     /// shows frame N-1 (or newer) while the GS thread finishes frame N.
@@ -207,6 +209,17 @@ impl App {
                 ];
             }
         }
+        if self.stick_keys != 0 {
+            let axis = |negative, positive| match (
+                self.stick_keys & negative != 0, self.stick_keys & positive != 0,
+            ) {
+                (true, false) => 0,
+                (false, true) => 255,
+                _ => 128,
+            };
+            state[0].1[2] = axis(8, 2);
+            state[0].1[3] = axis(1, 4);
+        }
         if open_menu && self.menu.is_none() {
             self.toggle_menu();
         }
@@ -239,6 +252,16 @@ fn pad_bit(k: KeyCode) -> Option<u16> {
         KeyCode::KeyZ => 1 << 15,  // Square
         _ => return None,
     })
+}
+
+fn stick_bit(k: KeyCode) -> Option<u8> {
+    match k {
+        KeyCode::KeyI => Some(1),
+        KeyCode::KeyL => Some(2),
+        KeyCode::KeyK => Some(4),
+        KeyCode::KeyJ => Some(8),
+        _ => None,
+    }
 }
 
 impl ApplicationHandler for App {
@@ -294,6 +317,10 @@ impl ApplicationHandler for App {
     fn window_event(&mut self, event_loop: &ActiveEventLoop, _id: WindowId, event: WindowEvent) {
         match event {
             WindowEvent::CloseRequested => event_loop.exit(),
+            WindowEvent::Focused(false) => {
+                self.keys = 0;
+                self.stick_keys = 0;
+            }
             WindowEvent::Resized(size) => {
                 if let Some(p) = self.presenter.as_mut() {
                     p.resize(size.width, size.height);
@@ -303,6 +330,13 @@ impl ApplicationHandler for App {
             WindowEvent::KeyboardInput { event, .. } => {
                 if let PhysicalKey::Code(code) = event.physical_key {
                     let pressed = event.state == ElementState::Pressed;
+                    if let Some(bit) = stick_bit(code) {
+                        if !pressed {
+                            self.stick_keys &= !bit;
+                        } else if self.menu.is_none() {
+                            self.stick_keys |= bit;
+                        }
+                    }
                     if code == KeyCode::F10 && pressed && !event.repeat {
                         self.toggle_menu();
                         return;
@@ -623,6 +657,7 @@ impl App {
             None => {
                 // (No key stays held in the game.)
                 self.keys = 0;
+                self.stick_keys = 0;
                 Some(0)
             }
         };
@@ -764,6 +799,7 @@ fn main() {
         shots: 0,
         fps_mark: Instant::now(),
         keys: 0,
+        stick_keys: 0,
         pending_display: None,
         gpu_ctx: None,
         pacer: ssx3_game::tick::Pacer::default(),

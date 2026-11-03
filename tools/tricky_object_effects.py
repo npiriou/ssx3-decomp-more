@@ -8,7 +8,7 @@ import math
 import struct
 
 from tricky_assets import FormatError
-from ssx3_luno import calls_blob
+from ssx3_luno import calls_blob, LABEL, GATE, JUMP
 
 
 def read_logic(data: bytes) -> tuple[list[tuple], list[list[dict]], list[dict]]:
@@ -95,6 +95,8 @@ def pack_object_scripts(ssf, pbd, models, collision, instances, source_to_instan
     invisible_tombstones = set()
     tombstones = set()
     rail_switches = set()
+    predicates = set()
+    scope_counter = 0
 
     # Mode setup runs before play in Tricky. Bake its unconditional rail
     # assignments into native initial properties, so restarting also has the
@@ -139,23 +141,27 @@ def pack_object_scripts(ssf, pbd, models, collision, instances, source_to_instan
 
     def expand(nodes, owner, seen):
         """ActOn runs a target graph in the current thread/continuation."""
+        nonlocal scope_counter
+        scope = scope_counter
+        scope_counter += 1
         result = []
         for node in nodes:
-            if node["main"] == 5:
-                # Retain this graph's unconditional prefix. A caller may
-                # still continue after it; predicate execution is pending.
-                break
-            elif node["main"] == 7:
+            if node["main"] == 7:
                 target, chain = node["words"][:2]
                 key = (target, chain)
                 if target in selected and key not in seen and chain < len(chains):
                     result.extend(expand(chains[chain], target, seen | {key}))
             else:
-                result.append((owner, node))
+                result.append((owner, dict(node, scope=scope)))
+        result.append((owner, {"main": -1, "words": (), "offset": -1, "scope": scope}))
         return result
 
     def compile_task(items, root, native_slot):
-        key = (root, native_slot, tuple((owner, node["offset"]) for owner, node in items))
+        # Scope serials are local compiler labels, not runtime identity. A
+        # canonical topology key lets loops across waits reuse their function.
+        scopes = {}
+        key = (root, native_slot, tuple((owner, node["offset"],
+               scopes.setdefault(node["scope"], len(scopes))) for owner, node in items))
         if key not in task_ids:
             rid = interactives.reserve_function()
             task_ids[key] = rid
@@ -167,13 +173,30 @@ def pack_object_scripts(ssf, pbd, models, collision, instances, source_to_instan
         return task_ids[key]
 
     def walk(items, root, native_slot, active_functions, commands):
+        thread_end = items[-1][1]["scope"]
         for index, (owner, node) in enumerate(items):
             main, words = node["main"], node["words"]
-            if main == 5:
-                # Predicates remain a later graph operation. Do not execute
-                # their tails unconditionally while implementing waits.
-                break
-            if main == 4:
+            if main == -1:
+                commands.append((LABEL, node["scope"]))
+            elif main == 5:
+                if len(words) != 3 or words[0] not in (0, 1, 2, 3):
+                    raise FormatError("invalid Tricky predicate mode")
+                kind, operation, value = words
+                if kind in (0, 1):
+                    number = float_value(value)
+                    if not math.isfinite(number) or number < 0 or (kind == 1 and number > 1):
+                        raise FormatError("invalid Tricky predicate threshold")
+                if kind == 0 and operation not in (0, 1):
+                    raise FormatError("invalid Tricky speed comparison")
+                # Human/no-node modes do not consume the trailing serialized
+                # words. Retail Merqury even contains an out-of-range word in
+                # its train gate: it is not a target instance reference.
+                args = [(0, kind, 1), (1, operation if kind == 0 else 0, 1),
+                        (2, value if kind in (0, 1) else 0, 2),
+                        (3, instance_rid(owner), 1)]
+                commands.append((GATE, (args, node["scope"])))
+                predicates.add((owner, node["offset"], kind))
+            elif main == 4:
                 if len(words) != 1 or not math.isfinite(float_value(words[0])) or float_value(words[0]) < 0:
                     raise FormatError("invalid Tricky wait duration")
                 tail = compile_task(items[index + 1:], root, native_slot)
@@ -181,7 +204,10 @@ def pack_object_scripts(ssf, pbd, models, collision, instances, source_to_instan
                                        (2, words[0], 2), (3, instance_rid(root), 1),
                                        (4, native_slot, 1)]))
                 waits.add((owner, node["offset"]))
-                break
+                # The passing path waits. A failed inner gate can still
+                # return to its caller and reach this remainder immediately,
+                # so retain it behind a branch to this thread's scope end.
+                commands.append((JUMP, thread_end))
             elif main in (21, 26):
                 function = words[0]
                 key = (owner, function)
@@ -363,11 +389,18 @@ def pack_object_scripts(ssf, pbd, models, collision, instances, source_to_instan
     # Keep every continuation which reaches a supported action, including
     # through other continuations; remove only code with no native consumer.
     meaningful = {2, 3, 4, 5, 13, 21, 22, 28, 111, 112, 119}
+
+    def action(call):
+        builtin, args = call
+        # A random condition consumes the native game RNG even while its
+        # particle consumer is pending. Retain its waiting continuations too.
+        return builtin in meaningful or (builtin == GATE and args[0][0][1] == 1)
+
     live_tasks = set()
     while True:
         discovered = {rid for rid, calls in tasks.items() if any(
-            builtin in meaningful or (builtin == 115 and args[0][1] in live_tasks)
-            for builtin, args in calls)}
+            action(call) or (call[0] == 115 and call[1][0][1] in live_tasks)
+            for call in calls)}
         if discovered == live_tasks:
             break
         live_tasks = discovered
@@ -379,7 +412,7 @@ def pack_object_scripts(ssf, pbd, models, collision, instances, source_to_instan
         interactives.define_function(rid, calls_blob(supported(calls)))
     roots = {key: supported(calls) for key, calls in roots.items()}
     roots = {key: calls for key, calls in roots.items()
-             if any(builtin in meaningful or builtin == 115 for builtin, _ in calls)}
+             if any(action(call) or call[0] == 115 for call in calls)}
     for (owner, native_slot), calls in roots.items():
         if any(builtin == 115 for builtin, _ in calls):
             calls.insert(0, (116, [(0, instance_rid(owner), 1), (1, native_slot, 1)]))
@@ -412,6 +445,7 @@ def pack_object_scripts(ssf, pbd, models, collision, instances, source_to_instan
             "source_wait_nodes": sorted(waits),
             "source_invisible_tombstones": sorted(invisible_tombstones),
             "source_tombstones": sorted(tombstones),
+            "source_predicate_nodes": sorted(predicates),
             "source_initial_rail_states": initial_rails,
             "source_scripted_rail_switches": sorted(rail_switches),
             "source_animated_instances": sorted({owner for owner, _ in records})}

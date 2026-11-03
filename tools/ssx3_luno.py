@@ -1,10 +1,15 @@
-"""Emit straight-line native Luno calls with named scalar arguments.
+"""Emit native Luno calls and scoped branches with named scalar arguments.
 
 Encoding follows SSX 3 USA LunoVM_Execute and its retail world-object scripts.
 The VM and native builtin table remain the game's; no new opcodes are added.
 """
 
 import struct
+
+# Compiler labels/branches; these become the VM's existing opcodes 0/2.
+LABEL = -1
+GATE = -2
+JUMP = -3
 
 
 def calls_blob(calls):
@@ -15,13 +20,28 @@ def calls_blob(calls):
     result in register two. Registers zero/one are reserved for the native
     receiver/default argument: LunoVM_Call always initializes both, even in
     a parameterless function. The descriptor allocates their maximum stack.
-    Imported reset/teleport adapters occupy unused builtin slots 111..114.
+    Imported action/condition adapters occupy unused builtin slots 111..120.
     Original retail scripts never name these slots.
     """
     code = []
-    guards = []
+    branches = []
+    labels = {}
     maximum = 0
     for builtin, arguments in calls:
+        if builtin == LABEL:
+            if arguments in labels:
+                raise ValueError("duplicate Luno scope label")
+            labels[arguments] = len(code)
+            continue
+        if builtin == JUMP:
+            branches.append((len(code), arguments))
+            code.append(0)  # native unconditional branch
+            continue
+        target = None
+        conditional = builtin == GATE
+        if conditional:
+            arguments, target = arguments
+            builtin = 120
         if not 0 <= builtin < 256 or len(arguments) > 255:
             raise ValueError("Luno builtin/argument count exceeds instruction fields")
         maximum = max(maximum, len(arguments))
@@ -30,15 +50,17 @@ def calls_blob(calls):
                 raise ValueError("unsupported Luno named scalar argument")
             code.extend(((0x26 if kind == 2 else 0x25) | (index << 8), bits))
         code.append(0x21 | (2 << 8) | (builtin << 16) | (len(arguments) << 24))
-        if builtin == 116:
+        if builtin == 116 or conditional:
             # Native opcode 2 branches on a false scalar. Its high word is
             # an absolute instruction index, not a byte offset.
-            guards.append(len(code))
+            branches.append((len(code), target))
             code.append(2 | (2 << 8))
     if len(code) > 65535:
         raise ValueError("Luno guard target exceeds the native instruction field")
-    for index in guards:
-        code[index] |= len(code) << 16
+    for index, target in branches:
+        if target is not None and target not in labels:
+            raise ValueError("undefined Luno scope label")
+        code[index] |= (len(code) if target is None else labels[target]) << 16
     code.append(0xff2a)  # return without a value, as in retail object scripts
     table = 16 + len(code) * 4
     end = table + 16

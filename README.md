@@ -71,6 +71,7 @@ A controller is picked up automatically (buttons map by position: bottom ✕, ri
 | Keyboard | PS2 | | Keyboard | |
 | --- | --- | --- | --- | --- |
 | Arrows | D-pad | | F10 | Settings (pauses) |
+| I / J / K / L | Left stick: up / left / down / right | | | |
 | X / S / Z / A | ✕ / ○ / □ / △ | | F11 | Fullscreen |
 | Q / W, 1 / 2 | L1 / R1, L2 / R2 | | F12 | Screenshot |
 | Enter / Right Shift | Start / Select | | | |

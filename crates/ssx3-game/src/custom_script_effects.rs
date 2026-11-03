@@ -8,7 +8,7 @@ use crate::ps2f::FpuF32;
 use ssx3_ee_rt::cpu::{reg::*, sx};
 use ssx3_ee_rt::Cpu;
 
-fn rider(c: &mut Cpu) -> Option<(u32, i32, u32)> {
+pub(crate) fn rider(c: &mut Cpu) -> Option<(u32, i32, u32)> {
     let manager = c.bus.read32((c.g[GP][0] as u32).wrapping_add(0xce8));
     if manager == 0 { return None }
     let index = c.bus.read32(manager) as i32;
@@ -74,11 +74,18 @@ fn teleport_frame(c: &mut Cpu, index: i32, matrix: u32) -> bool {
 /// output is initialized first, so the VM's existing unwind continuation is
 /// also valid if the native action yields.
 pub fn builtin(c: &mut Cpu, id: u32, back: u32) -> Option<Flow> {
-    if !(111..=119).contains(&id) || crate::custom_tracks::active().is_none() {
+    if !(111..=120).contains(&id) {
         return None;
     }
     let out = c.g[A0][0] as u32;
     for offset in [0, 4, 8] { c.bus.write32(out + offset, 0); }
+    // These slots belong to imported scripts even while a course retires.
+    // Their retail function-table entries are empty; do not fall through to
+    // a null native target if a late callback sees an inactive course.
+    if crate::custom_tracks::active().is_none() { return Some(Ok(())) }
+    if id == 120 {
+        return Some(crate::custom_script_predicates::begin(c, back));
+    }
     if id == 115 {
         crate::custom_script_queue::schedule(c);
         return Some(Ok(()));
@@ -149,6 +156,10 @@ pub fn builtin(c: &mut Cpu, id: u32, back: u32) -> Option<Flow> {
 /// Priming both distance fields prevents a teleport from collecting the time
 /// gates/splits along the skipped section of the old path.
 pub fn after_builtin(c: &mut Cpu, id: u32) {
+    if id == 120 && crate::custom_tracks::active().is_some() {
+        crate::custom_script_predicates::finish(c);
+        return;
+    }
     if !matches!(id, 112 | 114) || crate::custom_tracks::active().is_none() { return }
     let Some((_, index, address)) = rider(c) else { return };
     if id == 114 {
