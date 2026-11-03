@@ -1475,7 +1475,8 @@ pub fn mod_obj_render(c: &mut Cpu) {
                     }
                 }
             };
-            c.g[A2][0] = extra;
+            c.g[A2][0] = crate::custom_crowds::materials(c, this as u32)
+                .map(sx).unwrap_or(extra);
             // draw(gfx, model, extra, matrix, own matrix, uv, flags; alpha).
             c.cycles += 11;
             let cam_vt = Addr((gfx as u32).wrapping_add(0x10d8)).lw(c);

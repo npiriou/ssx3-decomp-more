@@ -26,11 +26,12 @@ PROPERTY_TYPES = {
     0: "roller_response", 6: "counter", 7: "directional_push", 10: "uv_scroll",
     11: "texture_flip", 12: "fence_flex", 13: "flag_wind",
     14: "cracked_glass", 15: "lap_lift", 18: "vertical_lift",
-    20: "mesh_break_animation", 24: "tube_exit",
+    17: "crowd_animation", 20: "mesh_break_animation", 23: "video_screen", 24: "tube_exit",
     256: "object_animation", 257: "delta_animation", 258: "combo_animation",
 }
 PUSHES = {"directional_push", "lap_lift", "vertical_lift", "tube_exit"}
-VISUAL = {"uv_scroll", "texture_flip", "fence_flex", "flag_wind", "particles"}
+VISUAL = {"uv_scroll", "texture_flip", "fence_flex", "flag_wind", "particles",
+          "crowd_animation", "video_screen"}
 
 
 def mechanic(node: dict) -> str | None:
@@ -107,6 +108,8 @@ def audit(course, iso: Path, overlay: Path) -> dict:
                    for mode, report in native.items()}
     empty_sounds = {mode: {(row[0], row[1]) for row in report.get("source_empty_object_sound_nodes", [])}
                     for mode, report in native.items()}
+    crowd_nodes = {mode: {tuple(row) for row in report.get("source_crowd_nodes", [])}
+                   for mode, report in native.items()}
 
     # ActOnInstance names an effect header on another instance, not a slot.
     # Collision roots alone miss sewer gates, falling trees and wall fragments.
@@ -181,6 +184,8 @@ def audit(course, iso: Path, overlay: Path) -> dict:
                         status = "native_flag_wind_response"
                     elif kind == "spline_mover" and (target, node["offset"]) in spline_nodes.get(mode, set()):
                         status = "native_detached_spline_copies"
+                    elif kind == "crowd_animation" and (target, node["offset"]) in crowd_nodes.get(mode, set()):
+                        status = "source_crowd_frames_and_private_native_materials"
                     elif kind == "object_sound" and (target, node["offset"]) in sound_nodes.get(mode, set()):
                         status = "native_object_voice_with_source_sample"
                     elif kind == "object_sound" and (target, node["offset"]) in empty_sounds.get(mode, set()):

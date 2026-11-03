@@ -40,6 +40,7 @@ from tricky_object_effects import (pack_object_scripts, source_pickups,
                                   mode_hidden_instances, read_logic)
 from tricky_race_settings import showoff_catalog
 from tricky_audio import object_sounds
+from ssx3_tricky_crowds import CrowdSprites
 
 
 def _verify_disc(iso: Path, serial: bytes, label: str) -> None:
@@ -188,10 +189,16 @@ def build(SSX3_iso: Path, tricky_iso: Path, output: Path, *,
     lightmap_ids = {rid for rid, _ in lightmaps}
     lightmap_sizes = {rid: struct.unpack_from("<2H", body, 4) for rid, body in lightmaps}
     particle_sprites = ParticleSprites(tricky_iso, texture_base + max(texture_ids, default=-1) + 1)
+    # Reserve crowd frames before the lazily assigned particle images. Both
+    # use native world slots and must never alias the mountain texture0.
+    crowds = CrowdSprites(tricky_iso, particle_sprites.first_id, pbd, models,
+        race_instances, model_ids, material_ids, source_to_instance, section_id, leaf_id)
+    particle_sprites.first_id += len(crowds.frames)
     object_summary = pack_object_scripts(
         ssf_data, pbd, models, collision_data, race_instances, source_to_instance,
         interactives, section_id, mode, particle_sprites=particle_sprites,
-        force_leases=contact_volumes, initial_hidden=mode_dynamic_hidden, sound_ids=sound_ids)
+        force_leases=contact_volumes, initial_hidden=mode_dynamic_hidden,
+        sound_ids=sound_ids, crowds=crowds)
     if max(texture_ids, default=-1) + texture_base > 32767:
         raise FormatError("Garibaldi texture IDs exceed the SSX 3 format")
     leaf = bytearray()
@@ -208,12 +215,16 @@ def build(SSX3_iso: Path, tricky_iso: Path, output: Path, *,
     for rid, body in particle_sprites.records():
         inspect_world_ssh(body, lightmap=False)
         leaf.extend(pack_resource(9, 255, rid, body))
+    for rid, body in crowds.records():
+        inspect_world_ssh(body, lightmap=False)
+        leaf.extend(pack_resource(9, 255, rid, body))
     shared = bytearray()
     for material in materials:
         if material["texture_id"] >= 0 and material["texture_id"] not in texture_ids:
             raise FormatError("Garibaldi material references a missing SSH texture")
         shared.extend(pack_resource(
             0, section_id, material_ids[material["index"]],
+            crowds.material() if material["index"] in crowds.materials else
             _material_payload(material, -1 if material["texture_id"] < 0 else
                               texture_base + material["texture_id"],
                               [texture_base + texture for texture in
@@ -245,7 +256,9 @@ def build(SSX3_iso: Path, tricky_iso: Path, output: Path, *,
     instance_flags = []
     for rid, index in enumerate(race_instances):
         instance = pbd["instances"][index]
-        if index in interactives.instance_payloads:
+        if index in crowds.instances:
+            payload = crowds.instances[index]
+        elif index in interactives.instance_payloads:
             payload = interactives.instance_payloads[index]
         else:
             payload = pack_instance(instance, model_layouts[instance["model_id"]],
@@ -367,6 +380,7 @@ def build(SSX3_iso: Path, tricky_iso: Path, output: Path, *,
         **object_summary,
         "source_object_sound_bank": sound_summary,
         **particle_sprites.summary(),
+        **crowds.summary(),
         "source_paths": "SOP" if mode == "freestyle" else "AIP",
         "source_timing": timing,
         "sky": sky_summary,
