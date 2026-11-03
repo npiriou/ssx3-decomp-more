@@ -1476,6 +1476,7 @@ pub fn mod_obj_render(c: &mut Cpu) {
                 }
             };
             c.g[A2][0] = crate::custom_crowds::materials(c, this as u32)
+                .or_else(|| crate::custom_movies::materials(c, this as u32))
                 .map(sx).unwrap_or(extra);
             // draw(gfx, model, extra, matrix, own matrix, uv, flags; alpha).
             c.cycles += 11;

@@ -96,6 +96,8 @@ pub fn load_texture_from_shape(c: &mut Cpu) {
             }
         }
 
+        crate::custom_movies::published(c, r(c, S0), r(c, S2), r(c, S1));
+
         c.cycles += 6;
         frame.restore(c, S0, 0x50);
         frame.restore(c, S1, 0x40);

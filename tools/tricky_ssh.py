@@ -101,6 +101,9 @@ def inspect_world_ssh(data: bytes, *, lightmap: bool) -> dict:
     if lightmap:
         if fmt != 5 or size != 0 or len(data) != 128 + width * height * 4:
             raise FormatError("WorldSSH lightmap layout is invalid")
+    elif fmt == 3:
+        if size != 128 + width * height * 2 or len(data) != size:
+            raise FormatError("WorldSSH sixteen-bit texture layout is invalid")
     elif (fmt != 2 or size != 128 + width * height or
           len(data) != size + 128 + 1024 or data[size] != 0x21):
         raise FormatError("WorldSSH indexed texture layout is invalid")

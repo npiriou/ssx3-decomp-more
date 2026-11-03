@@ -40,6 +40,7 @@ mod custom_roller_update;
 mod custom_initial_debounce;
 mod custom_animation_debounce;
 mod custom_crowds;
+mod custom_movies;
 mod custom_cracked_glass;
 mod custom_collision_emitters;
 mod custom_fences;

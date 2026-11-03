@@ -41,6 +41,7 @@ from tricky_object_effects import (pack_object_scripts, source_pickups,
 from tricky_race_settings import showoff_catalog
 from tricky_audio import object_sounds
 from ssx3_tricky_crowds import CrowdSprites
+from ssx3_tricky_movies import MovieScreens
 
 
 def _verify_disc(iso: Path, serial: bytes, label: str) -> None:
@@ -194,11 +195,15 @@ def build(SSX3_iso: Path, tricky_iso: Path, output: Path, *,
     crowds = CrowdSprites(tricky_iso, particle_sprites.first_id, pbd, models,
         race_instances, model_ids, material_ids, source_to_instance, section_id, leaf_id)
     particle_sprites.first_id += len(crowds.frames)
+    movies = MovieScreens(tricky_iso, selected.code, particle_sprites.first_id,
+        ssf_data, pbd, models, collision_data, race_instances, model_ids, material_ids,
+        source_to_instance, section_id, leaf_id, output)
+    particle_sprites.first_id += bool(movies.data)
     object_summary = pack_object_scripts(
         ssf_data, pbd, models, collision_data, race_instances, source_to_instance,
         interactives, section_id, mode, particle_sprites=particle_sprites,
         force_leases=contact_volumes, initial_hidden=mode_dynamic_hidden,
-        sound_ids=sound_ids, crowds=crowds)
+        sound_ids=sound_ids, crowds=crowds, movies=movies)
     if max(texture_ids, default=-1) + texture_base > 32767:
         raise FormatError("Garibaldi texture IDs exceed the SSX 3 format")
     leaf = bytearray()
@@ -216,6 +221,9 @@ def build(SSX3_iso: Path, tricky_iso: Path, output: Path, *,
         inspect_world_ssh(body, lightmap=False)
         leaf.extend(pack_resource(9, 255, rid, body))
     for rid, body in crowds.records():
+        inspect_world_ssh(body, lightmap=False)
+        leaf.extend(pack_resource(9, 255, rid, body))
+    for rid, body in movies.records():
         inspect_world_ssh(body, lightmap=False)
         leaf.extend(pack_resource(9, 255, rid, body))
     shared = bytearray()
@@ -256,7 +264,9 @@ def build(SSX3_iso: Path, tricky_iso: Path, output: Path, *,
     instance_flags = []
     for rid, index in enumerate(race_instances):
         instance = pbd["instances"][index]
-        if index in crowds.instances:
+        if index in movies.instances:
+            payload = movies.instances[index]
+        elif index in crowds.instances:
             payload = crowds.instances[index]
         elif index in interactives.instance_payloads:
             payload = interactives.instance_payloads[index]
@@ -381,6 +391,7 @@ def build(SSX3_iso: Path, tricky_iso: Path, output: Path, *,
         "source_object_sound_bank": sound_summary,
         **particle_sprites.summary(),
         **crowds.summary(),
+        **movies.summary(),
         "source_paths": "SOP" if mode == "freestyle" else "AIP",
         "source_timing": timing,
         "sky": sky_summary,

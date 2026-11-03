@@ -154,7 +154,7 @@ def source_pickups(ssf, collision, instances):
 
 def pack_object_scripts(ssf, pbd, models, collision, instances, source_to_instance,
                            interactives, section, mode, *, particle_sprites, force_leases=(),
-                           initial_hidden=(), sound_ids, crowds):
+                           initial_hidden=(), sound_ids, crowds, movies):
     slots, chains, functions = read_logic(ssf)
     selected = set(instances)
     records = {}
@@ -491,6 +491,12 @@ def pack_object_scripts(ssf, pbd, models, collision, instances, source_to_instan
                 flag_nodes.add((owner, node["offset"]))
                 flag_configs[owner] = [words[1], float_value(words[2]),
                                        float_value(words[3]), 0]
+            elif main == 0 and words[0] == 23:
+                if words != (23,):
+                    raise FormatError("unsupported Tricky Movie23 parameters")
+                rid = instance_rid(owner)
+                commands.extend(((0, [(0, rid, 1)]),
+                    (135, movies.register(owner, node["offset"], rid))))
             elif main == 0 and words[0] == 17:
                 rid = instance_rid(owner)
                 commands.extend(((0, [(0, rid, 1)]),
@@ -707,7 +713,7 @@ def pack_object_scripts(ssf, pbd, models, collision, instances, source_to_instan
     # Sound-only continuations have native work now; authored no-ops do not.
     # Keep every continuation which reaches a supported action, including
     # through other continuations; remove only code with no native consumer.
-    meaningful = {1, 2, 3, 4, 5, 9, 13, 21, 22, 25, 28, 30, 111, 112, 119, 122, 123, 124, 125, 126, 127, 128, 129, 130, 131, 132, 133, 134}
+    meaningful = {1, 2, 3, 4, 5, 9, 13, 21, 22, 25, 28, 30, 111, 112, 119, 122, 123, 124, 125, 126, 127, 128, 129, 130, 131, 132, 133, 134, 135}
 
     def action(call):
         builtin, args = call

@@ -45,6 +45,10 @@ def main() -> None:
             manifest = output.with_suffix(".json")
             complete = output.exists() and output.with_suffix(".FX").exists()
             previous = json.loads(manifest.read_text()) if manifest.exists() else {}
+            movie_frames = previous.get("world", {}).get("native_movie_frames", 0)
+            if complete and movie_frames:
+                movie_file = output.with_name(f"{selected.code}.TVM")
+                complete = movie_file.is_file() and movie_file.stat().st_size == 32 + movie_frames * 16384
             if args.ui_only and not (complete and previous):
                 raise ValueError(f"course archive is not prepared: {output}")
             if args.ui_only or (not args.force and complete and previous.get("importer") == fingerprint):

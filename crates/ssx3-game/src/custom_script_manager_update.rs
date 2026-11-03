@@ -64,6 +64,7 @@ pub fn wscript_man_update(c: &mut Cpu) {
                     crate::custom_initial_debounce::begin_update(c);
                     crate::custom_cracked_glass::begin_update(c);
                     crate::custom_crowds::begin_update(c);
+                    crate::custom_movies::begin_update(c);
                     call_ptr(c, 0x0030_9118, 0x0030_92a0)?;
                     pc = 0x0030_92a0;
                 }
@@ -335,6 +336,13 @@ pub fn wscript_man_update(c: &mut Cpu) {
                         c.g[A0][0] = sx(node);
                         c.g[A1][0] = 1;
                         call_ptr(c, 0x0034_fd00, 0x0030_949c)?;
+                        pc = 0x0030_949c;
+                        continue;
+                    }
+                    if let Some((manager, index)) = crate::custom_movies::next_frame(c) {
+                        c.g[A0][0] = sx(manager);
+                        c.g[A1][0] = sx(index);
+                        call_ptr(c, 0x0036_9098, 0x0030_949c)?;
                         pc = 0x0030_949c;
                         continue;
                     }

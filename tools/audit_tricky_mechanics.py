@@ -110,6 +110,8 @@ def audit(course, iso: Path, overlay: Path) -> dict:
                     for mode, report in native.items()}
     crowd_nodes = {mode: {tuple(row) for row in report.get("source_crowd_nodes", [])}
                    for mode, report in native.items()}
+    movie_nodes = {mode: {tuple(row) for row in report.get("source_movie_nodes", [])}
+                   for mode, report in native.items()}
 
     # ActOnInstance names an effect header on another instance, not a slot.
     # Collision roots alone miss sewer gates, falling trees and wall fragments.
@@ -184,6 +186,8 @@ def audit(course, iso: Path, overlay: Path) -> dict:
                         status = "native_flag_wind_response"
                     elif kind == "spline_mover" and (target, node["offset"]) in spline_nodes.get(mode, set()):
                         status = "native_detached_spline_copies"
+                    elif kind == "video_screen" and (target, node["offset"]) in movie_nodes.get(mode, set()):
+                        status = "source_movie_frames_in_shared_native_texture"
                     elif kind == "crowd_animation" and (target, node["offset"]) in crowd_nodes.get(mode, set()):
                         status = "source_crowd_frames_and_private_native_materials"
                     elif kind == "object_sound" and (target, node["offset"]) in sound_nodes.get(mode, set()):
