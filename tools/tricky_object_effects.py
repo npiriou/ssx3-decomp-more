@@ -139,6 +139,8 @@ def pack_object_scripts(ssf, pbd, models, collision, instances, source_to_instan
     collision_emitter_nodes = set()
     fence_nodes = set()
     fence_owners = set()
+    flag_nodes = set()
+    flag_configs = {}
     initial_debounce = set()
     cracked_nodes = set()
     cracked_configs = {}
@@ -381,6 +383,31 @@ def pack_object_scripts(ssf, pbd, models, collision, instances, source_to_instan
                                        (1, words[1], 1), (2, words[2], 2)]))
                 fence_nodes.add((owner, node["offset"]))
                 fence_owners.add(owner)
+            elif main == 0 and words[0] == 13:
+                if (len(words) != 5 or words[1] not in (0, 1) or words[4] != 0
+                        or not all(math.isfinite(float_value(v)) and float_value(v) >= 0
+                                   for v in words[2:4])):
+                    raise FormatError("unsupported Tricky wind-flag parameters")
+                model = models[pbd["instances"][owner]["model_id"]]
+                parts = model["objects"]
+                if (len(parts) != 1 or parts[0]["matrix"] is not None
+                        or parts[0]["animation"] is not None
+                        or len(parts[0]["meshes"]) != 1
+                        or len(parts[0]["meshes"][0]["chunks"]) != 1
+                        or len(parts[0]["meshes"][0]["chunks"][0]["positions"]) != 4):
+                    raise FormatError("Tricky wind flag requires one untransformed quad")
+                # Native GetQuad already returns model-local centimetres; do
+                # not apply Tricky's normalized-mesh division by scaleX*250.
+                # Source wave t=k/8, native t=k/7: compensate both its amplitude
+                # and spatial frequency. Native retains its own Y curvature.
+                amplitude = struct.unpack("<I", struct.pack("<f", float_value(words[3]) * 7 / 8))[0]
+                commands.append((130, [(0, instance_rid(owner), 1),
+                                       (1, 1 - words[1], 1), (2, words[1], 1),
+                                       (4, words[2], 2), (5, amplitude, 2),
+                                       (6, 0x3f600000, 2), (22, 0x3f800000, 2)]))
+                flag_nodes.add((owner, node["offset"]))
+                flag_configs[owner] = [words[1], float_value(words[2]),
+                                       float_value(words[3]), 0]
             elif main == 0 and words[0] == 14:
                 if len(words) != 3 or not all(math.isfinite(float_value(v)) for v in words[1:]):
                     raise FormatError("invalid Tricky cracked-glass parameters")
@@ -564,7 +591,7 @@ def pack_object_scripts(ssf, pbd, models, collision, instances, source_to_instan
     # Do not schedule loops consisting only of unimplemented sounds/emitters.
     # Keep every continuation which reaches a supported action, including
     # through other continuations; remove only code with no native consumer.
-    meaningful = {1, 2, 3, 4, 5, 9, 13, 21, 22, 25, 28, 111, 112, 119, 122, 123, 124, 125, 126, 127, 128, 129}
+    meaningful = {1, 2, 3, 4, 5, 9, 13, 21, 22, 25, 28, 111, 112, 119, 122, 123, 124, 125, 126, 127, 128, 129, 130}
 
     def action(call):
         builtin, args = call
@@ -663,6 +690,8 @@ def pack_object_scripts(ssf, pbd, models, collision, instances, source_to_instan
             "source_emitter_nodes": sorted(emitter_nodes),
             "source_collision_emitter_nodes": sorted(collision_emitter_nodes),
             "source_fence_nodes": sorted(fence_nodes),
+            "source_flag_nodes": sorted(flag_nodes),
+            "source_flag_configs": [[owner, *config] for owner, config in sorted(flag_configs.items())],
             "source_fence_neighbours": [[owner, pbd["instances"][owner]["next"],
                                          pbd["instances"][owner]["previous"]]
                                         for owner in sorted(fence_owners)],

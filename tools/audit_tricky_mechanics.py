@@ -93,6 +93,8 @@ def audit(course, iso: Path, overlay: Path) -> dict:
                      for mode, report in native.items()}
     fence_nodes = {mode: {tuple(row) for row in report.get("source_fence_nodes", [])}
                    for mode, report in native.items()}
+    flag_nodes = {mode: {tuple(row) for row in report.get("source_flag_nodes", [])}
+                  for mode, report in native.items()}
 
     # ActOnInstance names an effect header on another instance, not a slot.
     # Collision roots alone miss sewer gates, falling trees and wall fragments.
@@ -159,6 +161,8 @@ def audit(course, iso: Path, overlay: Path) -> dict:
                         status = "native_cracked_material_and_source_health"
                     elif kind == "fence_flex" and (target, node["offset"]) in fence_nodes.get(mode, set()):
                         status = "native_fence_contact_and_neighbours"
+                    elif kind == "flag_wind" and (target, node["offset"]) in flag_nodes.get(mode, set()):
+                        status = "native_flag_wind_response"
                     elif manifest is None:
                         status = "unprepared"
                     elif kind == "roller_response":
