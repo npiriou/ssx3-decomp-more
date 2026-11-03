@@ -36,7 +36,8 @@ from tricky_courses import Course, course
 from ssx3_tricky_sky import import_sky
 from ssx3_particle_sprites import ParticleSprites
 from tricky_gameplay import pack_gameplay
-from tricky_object_effects import pack_object_scripts, source_pickups, mode_hidden_instances
+from tricky_object_effects import (pack_object_scripts, source_pickups,
+                                  mode_hidden_instances, read_logic)
 from tricky_race_settings import showoff_catalog
 
 
@@ -116,10 +117,21 @@ def build(SSX3_iso: Path, tricky_iso: Path, output: Path, *,
         if len(finishes) != 1:
             raise FormatError("SOP requires a unique main-route finish")
         main_route = tuple(range(finishes[0] + 1))
-    # These SSF volumes are physics-only. Their debug meshes must not turn
-    # into visible scenery; the native rider adapter owns their triggers.
+    # Some invisible force volumes also own focus effects (Tokyo air shafts).
+    # Keep those owners; pack_world_script retains their cleared visible bit.
+    # Forces themselves remain in TFX2, without a second script receiver.
+    # Contact-only force owners still need the source force-node lifetime:
+    # importing their naked contact graph would repeatedly spawn effects
+    # while the rider stays inside (Alaska's fireworks trigger is one).
+    slots, _, _ = read_logic(ssf_data)
     boost_instances = set(gameplay_summary["source_boost_instances"])
+    focus_volumes = set()
+    for index in boost_instances:
+        prop = collision_data["properties"][collision_data["instance_properties"][index]]
+        if prop["effect_slot"] >= 0 and slots[prop["effect_slot"]][0] >= 0:
+            focus_volumes.add(index)
     race_instances = [index for index in race_instances if index not in boost_instances
+                      or index in focus_volumes
                       or collision_data["properties"][collision_data["instance_properties"][index]]["flags"] & 1]
     interactives = NativeInteractives(
         ssb, streams, locations,
@@ -351,6 +363,7 @@ def build(SSX3_iso: Path, tricky_iso: Path, output: Path, *,
             for channel in part["animation"]["channels"]),
         "source_mode_hidden_instances": sorted(mode_hidden),
         "source_mode_hidden_dynamic_targets": sorted(mode_dynamic_hidden),
+        "source_force_focus_instances": sorted(focus_volumes),
         "instance_count": len(race_instances) + len(interactives.posts) + len(interactives.emitter_anchors),
         **interactives.summary(),
         "collision_count": physics_base + len(collision_data["physics"]),
