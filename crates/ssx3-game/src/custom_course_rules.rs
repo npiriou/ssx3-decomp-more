@@ -61,6 +61,7 @@ pub fn set_root(root: Option<PathBuf>) {
     };
 }
 pub fn restart() {
+    ssx3_render::diagnostics::restart();
     crate::custom_finish_trace::restart();
     crate::custom_script_queue::restart();
     let mut rules = RULES.lock().unwrap();

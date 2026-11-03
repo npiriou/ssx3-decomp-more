@@ -28,6 +28,7 @@
 pub mod bezier;
 pub mod chain;
 pub mod direct;
+pub mod diagnostics;
 pub mod frame;
 pub mod gif;
 pub mod gpu;

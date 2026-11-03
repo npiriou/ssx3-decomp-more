@@ -23,6 +23,7 @@ mod bake_blur;
 pub mod debug;
 mod depth_query;
 mod draw;
+mod groundmark_trace;
 pub mod gs;
 mod options;
 pub mod pack;
@@ -89,6 +90,7 @@ struct CachedTex {
     used: u64,
     /// Largest texel alpha (GS units).
     amax: u8,
+    replaced: bool,
 }
 
 pub struct Inner {
@@ -119,6 +121,7 @@ pub struct Inner {
     pub stats: Stats,
     /// Texture dumps and replacements (`pack`).
     pack: pack::Pack,
+    groundmark_trace: groundmark_trace::Trace,
     /// The display buffer, when the game blends frames into it.
     display_fbp: Option<u32>,
     /// Internal resolution: GPU targets are this many times the GS's.
@@ -150,6 +153,7 @@ pub struct Inner {
     live_colour: [f32; 3],
     /// The GraphicsMan of the frame being drawn (TexMan for the cut-outs).
     frame_gm: u32,
+    frame_groundmark: Option<u16>,
     /// The world's shadow casters of the frame being drawn.
     world_casters: Option<std::sync::Arc<ssx3_render::world_casters::Casters>>,
     /// The world painter's sun (`world_casters::painter_sun`).
@@ -309,6 +313,7 @@ impl Renderer {
                 failed: Default::default(),
                 stats: Stats::default(),
                 pack: pack::Pack::from_env(),
+                groundmark_trace: Default::default(),
                 display_fbp: None,
                 scale: 1,
                 out_size: None,
@@ -322,6 +327,7 @@ impl Renderer {
                 world_casters: None,
                 painter_sun: None,
                 frame_gm: 0,
+                frame_groundmark: None,
                 live_ambient: [110.0, 112.0, 120.0],
                 live_colour: [90.0, 85.0, 70.0],
                 flare_sun: None,
@@ -778,6 +784,7 @@ impl Inner {
                 view: view.clone(),
                 used: frame,
                 amax,
+                replaced: replaced.is_some(),
             },
         );
         Some((view, amax))
@@ -981,6 +988,10 @@ impl Inner {
         self.world_casters = built.casters.clone();
         self.painter_sun = built.sun;
         self.frame_gm = built.frame.gm;
+        self.frame_groundmark = built.frame.draws().find(|d| {
+            d.state.raw[0] == 0xc0 && d.state.raw[1] == 0x0140_0294
+                && d.state.layer == 3 && d.state.material_param == 0
+        }).and_then(|d| d.tex[0]);
         Build::run(&mut b, built, mem);
         self.put_build(b);
         self.timing.1[0] += t_start.elapsed().as_secs_f64() * 1e3;
@@ -1248,6 +1259,9 @@ impl Inner {
             group(true)
         });
         // Plans per batch, uniforms, bind groups.
+        let mut groundmark = self.groundmark_trace.begin(
+            self.stats.frames, &self.gs, mem, self.frame_gm, self.frame_groundmark, self.opts,
+        );
         let batches = std::mem::take(&mut self.gs.batches);
         // With sun shadows the game's own rider shadows go: the render
         // targets its silhouettes (mat6 entry 0x20) are drawn into, and every
@@ -1670,6 +1684,14 @@ impl Inner {
                         _ => 65536.0,
                     };
                 }
+                if let Some(cap) = &mut groundmark {
+                    let replaced = st.tex.and_then(|info| {
+                        (info & (gs::RT_TEX | gs::ZFOG_TEX) == 0)
+                            .then(|| self.texkeys.key(mem, info, st.texa))
+                            .and_then(|key| self.texcache.get(&key).map(|t| t.replaced))
+                    });
+                    cap.plan(bi, st, &p, mem, &self.pack, replaced, light.is_some());
+                }
                 let u = &p.u;
                 let words: [u32; 24] = [
                     u.size[0].to_bits(),
@@ -1737,6 +1759,7 @@ impl Inner {
                 });
             }
         }
+        self.groundmark_trace.finish(groundmark);
         if items.is_empty() {
             return;
         }

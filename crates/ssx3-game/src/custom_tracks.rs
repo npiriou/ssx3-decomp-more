@@ -265,6 +265,7 @@ pub fn activate(id: &str) -> Option<&'static CustomTrack> {
     ACTIVE_WORLD_SECTION.store(u32::MAX, Ordering::Release);
     TEMPLATE_WORLD_SECTION.store(u32::MAX, Ordering::Release);
     ACTIVE.store(index + 1, Ordering::Release);
+    ssx3_render::diagnostics::set_course(Some(TRACKS[index].id));
     TRACKS.get(index)
 }
 
@@ -297,6 +298,7 @@ pub fn deactivate(c: &mut Cpu) {
     }
     BONUS_SELECTED.store(false, Ordering::Release);
     ACTIVE.store(0, Ordering::Release);
+    ssx3_render::diagnostics::set_course(None);
     ACTIVE_WORLD_SECTION.store(u32::MAX, Ordering::Release);
     TEMPLATE_WORLD_SECTION.store(u32::MAX, Ordering::Release);
 }

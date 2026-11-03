@@ -104,6 +104,11 @@ impl Pack {
         }
     }
 
+    /// The configured replacement path, for bounded render observations.
+    pub(crate) fn replacement(&self, k: &TexKey) -> Option<&std::path::Path> {
+        self.replace.get(&name(k)).map(PathBuf::as_path)
+    }
+
     /// The replacement for `k`, if there is one: its mipmap chain (GS alpha).
     pub fn load(&self, k: &TexKey) -> Option<Vec<Decoded>> {
         let path = self.replace.get(&name(k))?;
