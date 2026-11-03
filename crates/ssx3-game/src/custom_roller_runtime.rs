@@ -20,6 +20,7 @@ const SPIN: u32 = 0xf0;
 const TEMP: u32 = 0x100;
 const OUT: u32 = 0x140;
 const ARG: u32 = 0x150;
+const ROLLER_VTABLE: u32 = 0x0048_f080;
 
 #[derive(Clone, Copy)]
 struct Pending {
@@ -69,7 +70,12 @@ fn object(c: &mut Cpu, instance: u32) -> Option<(u32, u32)> {
     if !valid(node, 0x2c) || c.bus.read16(node + 0x10) != 17
         || c.bus.read32(node + 0x18) != instance { return None }
     let block = c.bus.read32(node + 0x1c);
-    Some((node, if valid(block, 4) { c.bus.read32(block) } else { 0 }))
+    let modifier = if valid(block, 4) { c.bus.read32(block) } else { 0 };
+    // A modifier slot/address can be reused after replacement or streaming.
+    // A retained Body record must never interpret another modifier's +20 as
+    // the Roller's timer. The surrounding ModObj can still be reused.
+    let roller = valid(modifier, 0x2d0) && c.bus.read32(modifier) == ROLLER_VTABLE;
+    Some((node, if roller { modifier } else { 0 }))
 }
 
 fn sphere(c: &mut Cpu, instance: u32) -> Option<u32> {
@@ -113,17 +119,32 @@ pub fn begin(c: &mut Cpu, back: u32) -> Flow {
     let Some(args) = args(c) else { return Ok(()) };
     if f32::from_bits(args[1]) <= 0. { return Ok(()) }
     let Some(instance) = crate::custom_script_effects::resident_instance(c, args[0]) else { return Ok(()) };
+    if let Some((node, modifier)) = object(c, instance) {
+        let mut state = STATE.lock().unwrap();
+        sync(&mut state);
+        if let Some(body) = state.bodies.get_mut(&modifier) {
+            if body.owner == args[0] && body.node == node && body.instance == instance {
+                // Source dispatch13c634..13c658 resumes a paused Roller
+                // through149e10, without reconstructing or relaunching it.
+                // Source Stop resets its elapsed time before pausing. The
+                // native modifier encodes that pause as timer11 instead.
+                // Direct native contacts already reset it in361cd8; this
+                // also covers ActOn/deferred retriggers on another owner.
+                if f32::from_bits(c.bus.read32(modifier + 0x20)) >= 11. {
+                    c.bus.write32(modifier + 0x20, 0);
+                    body.sleeping = false;
+                    trace(format_args!("{:08x} resumed at native pose", body.owner));
+                }
+                return Ok(());
+            }
+        }
+    }
+    // A live body owns its copied sphere tree. Only a new construction
+    // needs the source sphere resource to be resident again.
     let Some(mut shape) = sphere(c, instance) else {
         trace(format_args!("{:08x}: native sphere body unavailable", args[0]));
         return Ok(());
     };
-    if let Some((node, modifier)) = object(c, instance) {
-        let mut state = STATE.lock().unwrap();
-        sync(&mut state);
-        if state.bodies.get(&modifier).is_some_and(|b| b.node == node && b.instance == instance) {
-            return Ok(()); // native contact response acts on the live body
-        }
-    }
     let manager = c.bus.read32((c.g[GP][0] as u32).wrapping_add(0xce8));
     if !valid(manager, 0x29c) { return Ok(()) }
     let contact_a = c.bus.read32(manager + 0x298);
