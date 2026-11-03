@@ -10,6 +10,7 @@ import struct
 LABEL = -1
 GATE = -2
 JUMP = -3
+JUMP_FALSE = -4
 
 
 def calls_blob(calls):
@@ -20,7 +21,7 @@ def calls_blob(calls):
     result in register two. Registers zero/one are reserved for the native
     receiver/default argument: LunoVM_Call always initializes both, even in
     a parameterless function. The descriptor allocates their maximum stack.
-    Imported action/condition adapters occupy unused builtin slots 111..123.
+    Imported action/condition adapters occupy unused builtin slots 111..126.
     Original retail scripts never name these slots.
     """
     code = []
@@ -36,6 +37,10 @@ def calls_blob(calls):
         if builtin == JUMP:
             branches.append((len(code), arguments))
             code.append(0)  # native unconditional branch
+            continue
+        if builtin == JUMP_FALSE:
+            branches.append((len(code), arguments))
+            code.append(2 | (2 << 8))  # false result of the preceding call
             continue
         target = None
         conditional = builtin == GATE

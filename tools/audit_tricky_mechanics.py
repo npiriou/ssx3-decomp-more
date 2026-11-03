@@ -87,6 +87,8 @@ def audit(course, iso: Path, overlay: Path) -> dict:
     roller_ids = {mode: set(report.get("source_roller_instances", [])) for mode, report in native.items()}
     pop_nodes = {mode: {tuple(row) for row in report.get("source_pop_burst_nodes", [])}
                  for mode, report in native.items()}
+    cracked_nodes = {mode: {tuple(row) for row in report.get("source_cracked_nodes", [])}
+                     for mode, report in native.items()}
 
     # ActOnInstance names an effect header on another instance, not a slot.
     # Collision roots alone miss sewer gates, falling trees and wall fragments.
@@ -149,6 +151,8 @@ def audit(course, iso: Path, overlay: Path) -> dict:
                         status = "native_rigid_body_script"
                     elif kind == "particles" and (target, node["offset"]) in pop_nodes.get(mode, set()):
                         status = "native_particle_script"
+                    elif kind == "cracked_glass" and (target, node["offset"]) in cracked_nodes.get(mode, set()):
+                        status = "native_cracked_material_and_source_health"
                     elif manifest is None:
                         status = "unprepared"
                     elif kind == "roller_response":

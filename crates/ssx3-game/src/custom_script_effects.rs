@@ -99,7 +99,7 @@ fn teleport_frame(c: &mut Cpu, index: i32, matrix: u32) -> bool {
 /// output is initialized first, so the VM's existing unwind continuation is
 /// also valid if the native action yields.
 pub fn builtin(c: &mut Cpu, id: u32, back: u32) -> Option<Flow> {
-    if !(111..=123).contains(&id) {
+    if !(111..=126).contains(&id) {
         return None;
     }
     let out = c.g[A0][0] as u32;
@@ -108,6 +108,9 @@ pub fn builtin(c: &mut Cpu, id: u32, back: u32) -> Option<Flow> {
     // Their retail function-table entries are empty; do not fall through to
     // a null native target if a late callback sees an inactive course.
     if crate::custom_tracks::active().is_none() { return Some(Ok(())) }
+    if id == 124 { crate::custom_cracked_glass::contact(c); return Some(Ok(())); }
+    if id == 125 { crate::custom_cracked_glass::attach(c); return Some(Ok(())); }
+    if id == 126 { crate::custom_cracked_glass::message(c); return Some(Ok(())); }
     if id == 123 {
         crate::custom_initial_debounce::register(c);
         return Some(Ok(()));

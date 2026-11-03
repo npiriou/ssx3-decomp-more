@@ -8,7 +8,7 @@ import math
 import struct
 
 from tricky_assets import FormatError
-from ssx3_luno import calls_blob, LABEL, GATE, JUMP
+from ssx3_luno import calls_blob, LABEL, GATE, JUMP, JUMP_FALSE
 
 
 def read_logic(data: bytes) -> tuple[list[tuple], list[list[dict]], list[dict]]:
@@ -136,6 +136,8 @@ def pack_object_scripts(ssf, pbd, models, collision, instances, source_to_instan
     rollers = set()
     pop_bursts = set()
     initial_debounce = set()
+    cracked_nodes = set()
+    cracked_configs = {}
     receiver_kinds = {}
     tasks = {}
     task_ids = {}
@@ -362,6 +364,30 @@ def pack_object_scripts(ssf, pbd, models, collision, instances, source_to_instan
                                      (1, words[1] if words[1] else 0xffffffff, 1)]))
                 counters[owner] = (words[1], words[2])
                 receiver_kinds[owner] = 6
+            elif main == 0 and words[0] == 14:
+                if len(words) != 3 or not all(math.isfinite(float_value(v)) for v in words[1:]):
+                    raise FormatError("invalid Tricky cracked-glass parameters")
+                model = models[pbd["instances"][owner]["model_id"]]
+                materials = sorted({mesh["material"] for part in model["objects"] for mesh in part["meshes"]})
+                books = [pbd["texture_flipbooks"][pbd["materials"][i]["texture_flipbook_id"]]
+                         for i in materials if pbd["materials"][i]["texture_flipbook_id"] >= 0]
+                if len(materials) > 8 or not books or any(len(book) != 2 for book in books):
+                    # Every source Cracked14 in the supplied worlds uses
+                    # two frames: native frame1 is the authored cracked
+                    # image and consumes no RNG. Longer source books need
+                    # their recovered random nonzero-frame selection first.
+                    raise FormatError("unsupported Tricky cracked material frame layout")
+                rid = instance_rid(owner)
+                args = [(0, rid, 1), (1, words[1], 2), (2, words[2], 2)]
+                label = ("cracked", node["scope"], node["offset"])
+                commands.extend(((124, args), (JUMP_FALSE, label),
+                                 (0, [(0, rid, 1)]),
+                                 (22, [(0, rid, 1), (1, 0, 1), (2, 1, 1),
+                                       (3, 0, 1), (4, 0, 2)]),
+                                 (125, args), (LABEL, label)))
+                cracked_nodes.add((owner, node["offset"]))
+                cracked_configs[owner] = [float_value(words[1]), float_value(words[2])]
+                receiver_kinds[owner] = 14
             elif main == 0 and words[0] == 5 and words[1] == 4:
                 # Tricky's hard breakable kill is native DeadNode mode zero.
                 # Its constructor clears drawing/collision and the native
@@ -494,6 +520,10 @@ def pack_object_scripts(ssf, pbd, models, collision, instances, source_to_instan
                         # Native event 300 takes phase-per-60Hz-tick; the
                         # source receiver command is frames per second.
                         value = struct.unpack("<I", struct.pack("<f", float_value(value) / 60))[0]
+                elif receiver == 14 and command in (1, 2):
+                    commands.append((126, [(0, instance_rid(owner), 1),
+                                           (1, command, 1), (2, value, 2)]))
+                    continue
                 if message is not None:
                     rid = (source_to_instance[owner] << 8) | section
                     commands.append((28, [(0, rid, 1), (1, message, 1), (2, value, 2)]))
@@ -517,7 +547,7 @@ def pack_object_scripts(ssf, pbd, models, collision, instances, source_to_instan
     # Do not schedule loops consisting only of unimplemented sounds/emitters.
     # Keep every continuation which reaches a supported action, including
     # through other continuations; remove only code with no native consumer.
-    meaningful = {1, 2, 3, 4, 5, 9, 13, 21, 22, 25, 28, 111, 112, 119, 122, 123}
+    meaningful = {1, 2, 3, 4, 5, 9, 13, 21, 22, 25, 28, 111, 112, 119, 122, 123, 124, 125, 126}
 
     def action(call):
         builtin, args = call
@@ -601,6 +631,8 @@ def pack_object_scripts(ssf, pbd, models, collision, instances, source_to_instan
             "source_counter_configs": [[owner, *config] for owner, config in sorted(counters.items())],
             "source_roller_instances": sorted(rollers),
             "source_initial_debounce_instances": sorted(initial_debounce),
+            "source_cracked_nodes": sorted(cracked_nodes),
+            "source_cracked_configs": [[owner, *config] for owner, config in sorted(cracked_configs.items())],
             "source_pop_burst_nodes": sorted(pop_bursts),
             "source_contact_only_instances": sorted(interactives.contact_only_instances),
             "source_non_bouncing_breakables": sorted(break_through),

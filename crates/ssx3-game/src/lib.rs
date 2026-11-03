@@ -38,6 +38,7 @@ mod custom_counter_trace;
 mod custom_roller_runtime;
 mod custom_roller_update;
 mod custom_initial_debounce;
+mod custom_cracked_glass;
 mod custom_rail_diagnostics;
 mod custom_contact_trace;
 pub mod custom_rail_rules;
