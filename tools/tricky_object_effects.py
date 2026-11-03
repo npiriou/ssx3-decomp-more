@@ -159,6 +159,7 @@ def pack_object_scripts(ssf, pbd, models, collision, instances, source_to_instan
     selected = set(instances)
     records = {}
     static_animation_nodes = set()
+    animation_debounce_nodes = set()
     roots = {}
     animation_kinds = {}
     resets = set()
@@ -625,6 +626,9 @@ def pack_object_scripts(ssf, pbd, models, collision, instances, source_to_instan
                 arguments = [(i, value, 2 if 3 <= i <= 7 or (kind == 258 and 10 <= i <= 12) else 1)
                              for i, value in enumerate(params)]
                 commands.append((kind - 253, arguments))  # native builtin IDs 3/4/5
+                commands.append((133, [(0, rid, 1), (1, debounce, 2),
+                                       (2, int(native_slot == 2), 1)]))
+                animation_debounce_nodes.add((owner, node["offset"], debounce))
                 animation_kinds[owner] = kind
                 records[owner, node["offset"]] = kind
                 if not has_curves:
@@ -687,7 +691,7 @@ def pack_object_scripts(ssf, pbd, models, collision, instances, source_to_instan
     # Do not schedule loops consisting only of unimplemented sounds/emitters.
     # Keep every continuation which reaches a supported action, including
     # through other continuations; remove only code with no native consumer.
-    meaningful = {1, 2, 3, 4, 5, 9, 13, 21, 22, 25, 28, 111, 112, 119, 122, 123, 124, 125, 126, 127, 128, 129, 130, 131, 132}
+    meaningful = {1, 2, 3, 4, 5, 9, 13, 21, 22, 25, 28, 111, 112, 119, 122, 123, 124, 125, 126, 127, 128, 129, 130, 131, 132, 133}
 
     def action(call):
         builtin, args = call
@@ -766,6 +770,7 @@ def pack_object_scripts(ssf, pbd, models, collision, instances, source_to_instan
             "native_delta_animations": sum(kind == 257 for kind in records.values()),
             "native_combo_animations": sum(kind == 258 for kind in records.values()),
             "source_static_animation_nodes": sorted(static_animation_nodes),
+            "source_animation_debounce_nodes": sorted(animation_debounce_nodes),
             "native_scripted_resets": len(resets),
             "source_reset_instances": sorted(resets),
             "native_mesh_break_animations": len(fragments),

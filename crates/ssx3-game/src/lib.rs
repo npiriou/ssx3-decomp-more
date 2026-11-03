@@ -38,6 +38,7 @@ mod custom_counter_trace;
 mod custom_roller_runtime;
 mod custom_roller_update;
 mod custom_initial_debounce;
+mod custom_animation_debounce;
 mod custom_cracked_glass;
 mod custom_collision_emitters;
 mod custom_fences;

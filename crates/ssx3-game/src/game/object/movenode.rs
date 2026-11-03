@@ -2199,6 +2199,10 @@ pub fn parent_modifier_ctor(c: &mut Cpu) {
 /// (int)((float)gp->0x2a74->0x10 * secs)` — an integer field scaled by the
 /// frame time and truncated.
 pub fn mod_obj_v41(c: &mut Cpu) {
+    let original_seconds = c.f[12];
+    if let Some(seconds) = crate::custom_animation_debounce::contact_seconds(c) {
+        c.f[12] = seconds;
+    }
     c.cycles += 8;
     let gp = r32(c, GP);
     let cfg = Addr(gp.wrapping_add(0x2a74)).lw(c);
@@ -2210,6 +2214,7 @@ pub fn mod_obj_v41(c: &mut Cpu) {
     c.cvt_w_s(1, 0);
     let this = r32(c, A0);
     c.swc1(1, this.wrapping_add(0x20));
+    c.f[12] = original_seconds;
     abi::ret(c);
 }
 
