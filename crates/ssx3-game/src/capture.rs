@@ -1210,6 +1210,12 @@ fn draw_patch_fx(c: &mut Cpu) {
 /// Slot 95 `DrawModel(f12 alpha, gm, inst, ...)` (0x37e238): per strip
 /// group a header packet and a CALL into the model's mesh chain.
 fn draw_model(c: &mut Cpu) {
+    // Imported movies use their source alpha equation through the native
+    // model path even when the optional packet-capture fallback is selected.
+    // Untagged/retail draws retain that fallback's original implementation.
+    if crate::custom_movies::is_screen(c, c.g[A1][0] as u32, c.g[A2][0] as u32) {
+        return crate::packetless::draw_model(c);
+    }
     let gm = c.g[A0][0] as u32;
     capture_packets(
         c,

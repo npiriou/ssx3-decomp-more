@@ -237,3 +237,17 @@ pub fn materials(c: &mut Cpu, node: u32) -> Option<u32> {
     let screen = state.screens.get(&node)?;
     installed(c, node, screen).then_some(screen.storage + 16)
 }
+
+/// Source Movie_Render148d28 selects alpha mode3 for both contexts.
+/// State bytes15/17 reach GsPkt_AddAlpha1c03e8, whose mode3 emits ALPHA44:
+/// (Cs-Cd)*As+Cd. Native preset5 has that same equation. DrawModel normally
+/// replaces an opaque material's blend with preset1; the registered movie
+/// table must instead keep the source blend, without changing sorting/Z/test.
+pub fn is_screen(c: &mut Cpu, instance: u32, table: u32) -> bool {
+    if crate::custom_tracks::active().is_none() || !valid(instance, 0xa0) { return false }
+    let node = c.bus.read32(instance + 12);
+    let mut state = STATE.lock().unwrap();
+    if !sync(&mut state) { return false }
+    state.screens.get(&node).is_some_and(|screen|
+        screen.instance == instance && screen.storage + 16 == table && installed(c, node, screen))
+}

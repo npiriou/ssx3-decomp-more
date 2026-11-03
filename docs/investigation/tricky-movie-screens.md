@@ -35,9 +35,16 @@ establish in-game appearance or completion of the full mechanics objective.
   original model/instance/matrix. It also calls graphics virtual1e0 with3.
   Source constructor1ea0c0 installs vtable393610; that slot resolves to1e9418,
   which updates bytes15/17 of the current draw-state record at graphics+470.
-  Its symbolic meaning/native equivalent is not yet established. Do not call
-  native SetTextureFilter with a guessed mode3: that API takes texture index
-  and four separate TEX1 fields. This remaining state correspondence is open.
+  Those are the two alpha blend selectors: state emission1c5298/1c52fc passes
+  them to GsPkt_AddAlpha1c03e8 with context1/2. Case3 at1c0438, selected by
+  table390860, emits GS ALPHA44: `(Cs-Cd)*As+Cd`. Native preset5 emits the same
+  value (ssx3-render/frame.rs::blend_preset). This correspondence is resolved
+  in v57. It is unrelated to native SetTextureFilter's separate TEX1 fields.
+- Source model material flags1 selects the ordinary zero/zero test branch
+  at1e273c; it does not replace those blend selectors. Source translucent
+  flags40000 follow a different branch. Therefore preserve ordinary native
+  sorting/Z/test fields while supplying the recovered alpha equation; using
+  a translucent native material would also change those unrelated fields.
 
 ## Native consumer
 
@@ -63,7 +70,7 @@ vtable178 `this` adjustment used by that loader and verifies its slot, format2,
 16384-byte size and pixel pointer. It does not guess an embedded manager offset.
 The retained native SetTextureFilter37d090 port is uninstalled/empty OVERRIDES;
 its inspected TEX1 contract is not installed as a replacement or mapped to
-the unidentified source draw-state selector.
+the source alpha selector.
 
 The native script-manager epilogue copies at most one due picture into the
 native texture buffer, then calls existing native TexMan_EvictTexture369098.
@@ -84,9 +91,39 @@ requires the shared TVM file/extent before retaining a cached movie world.
 
 ## Evidence and remaining observations
 
+### Native alpha correspondence (v57)
+
+The existing native DrawModel normally replaces the opaque branch's blend
+with preset1/context1 and preset3/context2. Setting the current state before
+calling it would be overwritten; its predefined opaque bucket also carries
+those modes. `custom_movies::is_screen` identifies only a live registered
+instance with its exact private material table. The native model path now
+uses preset5 in both fields for that movie's opaque branch and avoids the
+predefined opaque bucket. Ordinary native sort, Z/test/AREF, geometry, texture
+IDs, clipping, lighting and existing fade handling are retained.
+
+The packet-capture fallback also routes registered movie tables through this
+existing native model implementation. Other imported/retail models retain
+their original path. No shared base-state record, shared material, global
+texture, native preset table or GPU blend implementation is patched. Native
+draw-state interning and bucket submission receive the source equation.
+
+The prepared source16-bit pictures have binary alpha. The initial all-zero
+texture and zero palette entries now preserve the destination under that
+equation; nonzero opaque entries use alpha128. This follows from the source
+pixels and blend operation, not a current-version visual observation.
+
+Only Rust rendering code changes in v57. All19 final v56 archives/seven TVM
+files remain current; they are not rebuilt for this change. Source inspection
+is retained in `.cache/tricky-movie-{model,alpha,state}-v57.disasm.txt` and
+`.cache/inspect-movie-blend-v57.log`. Native compilation is recorded in
+`.cache/build-tricky-movie-blend-v57.log`. Current appearance and native
+submission/upload execution remain unobserved. The v57 native build succeeds
+in1m24s; it is the current binary for this rendering change.
+
 - `.cache/build-tricky-movies-v56.log`: native build succeeds in1m24s.
-  No installed runtime changed after that build. The later retained filter
-  translation is not compiled or installed.
+  This is the initial v56 integration build, superseded by the v57 build
+  above. The retained filter translation is not compiled or installed.
 - `.cache/prepare-tricky-movies-v56-all.log`: all19 variants regenerated,
   including the existing11 object-sound banks and7 shared TVM files.
 - `.cache/tricky-movies-v56-inspection.json`: read-only actual SSS/TVM/BAM
@@ -104,8 +141,9 @@ requires the shared TVM file/extent before retaining a cached movie world.
   inventory's declared families, now including CrowdBox17/Movie23. This does
   not mean all source rendering state, actual native publication/uploads,
   appearance, loop/focus/restart/course-switch behavior or full courses are
-  accepted. Source virtual1e0/native correspondence remains open, as do the
-  reported rails, Tokyo groundmark/camera/finish and other pending observations.
+  accepted. Source virtual1e0/native correspondence is resolved in v57; the
+  reported rails, Tokyo groundmark/camera/finish and other pending observations
+  remain open.
 
 No automated tests, replay, gate, browser build, game launch or window control
 occurred. Existing user-accepted snow/boosts/anger icons/Roller physics remain

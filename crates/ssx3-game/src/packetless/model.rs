@@ -134,6 +134,7 @@ pub fn draw_model(c: &mut Cpu) {
         c.g[A3][0] as u32,
     );
     let (node_arg, mat2_arg, mut flags) = (c.g[T0][0] as u32, c.g[T1][0] as u32, c.g[T2][0] as u32);
+    let source_movie = crate::custom_movies::is_screen(c, inst, textab);
     let mut groups_drawn = 0u64;
     ensure_view_matrices(c, gm, 0x0037_e2bc);
     if flags & 0x400 == 0 {
@@ -280,7 +281,10 @@ pub fn draw_model(c: &mut Cpu) {
     }
     let count = r32(c, desc + 4) as i32;
     let nodes = r32(c, desc + 8);
-    let fast_allowed = (flags as i32 >> 11) & 1 != 0;
+    // A predefined opaque bucket owns preset1. Movie23 needs source ALPHA44
+    // (native preset5) in a normally interned state, retaining opaque Z/test
+    // and sorting behavior rather than adopting a translucent material mode.
+    let fast_allowed = (flags as i32 >> 11) & 1 != 0 && !source_movie;
     for i in 0..count.max(0) as u32 {
         let ml = r32(c, nodes + 0x10 * i + 4);
         if ml == 0 || r32(c, ml + 0x1c) == 0 {
@@ -366,7 +370,8 @@ pub fn draw_model(c: &mut Cpu) {
                         if fast {
                             base = r32(c, dm + 0x57488);
                         } else {
-                            base_state(c, gm, (4, 0x180), 0, 0, 0x1_4000);
+                            let blend = if source_movie { (5 << 2, 5 << 7) } else { (4, 0x180) };
+                            base_state(c, gm, blend, 0, 0, 0x1_4000);
                         }
                     }
                     0x60_0000 => {
