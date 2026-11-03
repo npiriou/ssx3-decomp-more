@@ -88,6 +88,7 @@ def pack_object_scripts(ssf, pbd, models, collision, instances, source_to_instan
     teleports = {}
     scrolls = set()
     flips = set()
+    material_lifetimes = set()
     receiver_kinds = {}
     tasks = {}
     task_ids = {}
@@ -285,8 +286,6 @@ def pack_object_scripts(ssf, pbd, models, collision, instances, source_to_instan
                 if len(words) != 7 or not all(math.isfinite(float_value(v)) for v in words[2:]):
                     raise FormatError("invalid Tricky UV scroll parameters")
                 _, mode, du, dv, active, pause, lifetime = words
-                if float_value(lifetime) != 0:
-                    continue  # finite property teardown needs its continuation
                 rid = (source_to_instance[owner] << 8) | section
                 native_mode = {1: 6, 2: 2}.get(mode, 0)
                 # Native Object promotes visible static instances itself.
@@ -297,14 +296,15 @@ def pack_object_scripts(ssf, pbd, models, collision, instances, source_to_instan
                           0, 0, 0, 0x3f800000]
                 commands.append((21, [(i, v, 1 if i < 2 else 2)
                                       for i, v in enumerate(params)]))
+                commands.append((121, [(0, rid, 1), (1, 10, 1), (2, lifetime, 2)]))
+                if float_value(lifetime) > 0:
+                    material_lifetimes.add((owner, 10, float_value(lifetime)))
                 scrolls.add(owner)
                 receiver_kinds[owner] = 10
             elif main == 0 and words[0] == 11:
                 if len(words) != 6 or not all(math.isfinite(float_value(v)) for v in words[3:5]):
                     raise FormatError("invalid Tricky texture flip parameters")
                 _, start, direction, speed, lifetime, dwell = words
-                if float_value(lifetime) != 0:
-                    continue  # preserve finite lifetime rather than loop forever
                 model = models[pbd["instances"][owner]["model_id"]]
                 materials = {mesh["material"] for part in model["objects"] for mesh in part["meshes"]}
                 if not any(pbd["materials"][i]["texture_flipbook_id"] >= 0 for i in materials):
@@ -317,6 +317,9 @@ def pack_object_scripts(ssf, pbd, models, collision, instances, source_to_instan
                 commands.append((0, [(0, rid, 1)]))
                 commands.append((22, [(0, rid, 1), (1, dwell, 1), (2, start, 1),
                                       (3, direction, 1), (4, speed, 2)]))
+                commands.append((121, [(0, rid, 1), (1, 11, 1), (2, lifetime, 2)]))
+                if float_value(lifetime) > 0:
+                    material_lifetimes.add((owner, 11, float_value(lifetime)))
                 flips.add(owner)
                 receiver_kinds[owner] = 11
             elif main == 0 and words[0] in (256, 257, 258):
@@ -441,6 +444,7 @@ def pack_object_scripts(ssf, pbd, models, collision, instances, source_to_instan
             "native_object_script_owners": owners,
             "source_uv_scroll_instances": sorted(scrolls),
             "source_texture_flip_instances": sorted(flips),
+            "source_finite_material_properties": sorted(material_lifetimes),
             "native_deferred_functions": len(live_tasks),
             "source_wait_nodes": sorted(waits),
             "source_invisible_tombstones": sorted(invisible_tombstones),

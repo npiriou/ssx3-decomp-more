@@ -60,6 +60,7 @@ pub fn wscript_man_update(c: &mut Cpu) {
                     c.g[S7][0] = 0;
                     c.g[S2][0] = c.g[A0][0];
                     crate::custom_script_queue::begin_update(c);
+                    crate::custom_script_materials::begin_update(c);
                     call_ptr(c, 0x0030_9118, 0x0030_92a0)?;
                     pc = 0x0030_92a0;
                 }
@@ -320,6 +321,12 @@ pub fn wscript_man_update(c: &mut Cpu) {
                     if c.g[S7][0] != 0 {
                         crate::custom_script_queue::finish(c, r(c, S2), r(c, SP));
                         c.g[S7][0] = 0;
+                    }
+                    if let Some((function, owner)) = crate::custom_script_materials::next_expired(c) {
+                        c.g[A0][0] = sx(owner);
+                        call_ptr(c, function, 0x0030_949c)?;
+                        pc = 0x0030_949c;
+                        continue;
                     }
                     if crate::custom_script_queue::prepare_next(c, r(c, S2), r(c, SP)) {
                         c.g[S7][0] = 1;

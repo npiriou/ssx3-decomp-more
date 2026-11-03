@@ -20,7 +20,7 @@ def calls_blob(calls):
     result in register two. Registers zero/one are reserved for the native
     receiver/default argument: LunoVM_Call always initializes both, even in
     a parameterless function. The descriptor allocates their maximum stack.
-    Imported action/condition adapters occupy unused builtin slots 111..120.
+    Imported action/condition adapters occupy unused builtin slots 111..121.
     Original retail scripts never name these slots.
     """
     code = []

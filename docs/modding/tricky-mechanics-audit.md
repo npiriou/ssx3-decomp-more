@@ -13,9 +13,13 @@ SOP sont maintenant implémentés. Les huit murs de Pipedream et le téléporteu
 de Merqury disposent de scripts natifs ; un mur et la traversée du portail ont
 été observés en jeu. Les courbes des objets et les effets de texture persistants
 sont aussi importés, avec une observation partielle de leurs acteurs natifs.
-Les lignes ci-dessous restent l'inventaire de départ, pas le statut actuel
-de chaque correction. Les séquences différées/conditionnelles, les vitres
-fissurables, les movers et plusieurs familles de décors restent à traiter.
+Les attentes et conditions des scripts sont maintenant prises en charge, ainsi
+que les transitions des rails de Mesa et les tombstones des objets cassés.
+Les resets différés ont été observés sur un contact réel de rivière en Alaska.
+Les lignes ci-dessous restent l'inventaire de départ, pas le statut actuel de
+chaque correction. Les vitres fissurables de Tokyo, les movers train/câble,
+les réactions Roller et plusieurs familles de décors restent à traiter ; le
+plan distingue leurs manques et les observations encore nécessaires.
 
 Oui, plusieurs mécaniques restent absentes. Les plus importantes pour le
 parcours sont les murs destructibles de Pipedream, le téléporteur de Merqury,
@@ -29,6 +33,35 @@ n'a été trouvé sur les autres maps. Cela ne démontre pas l'équivalence de
 toutes les interactions physiques avec les objets.
 
 ## Mécaniques par map
+
+### Manques encore repérés après les corrections v29
+
+Inventaire actualisé sur les onze mondes et les dix-neuf variantes. Une famille
+sans consommateur importé reste un manque de script ; cela ne signifie pas
+que toute collision ou tout rebond natif est absent.
+
+| Famille restante | Maps concernées |
+| --- | --- |
+| Fissuration, résistance et déclenchement des vingt vitres | Tokyo Megaplex |
+| Movers sur spline, notamment train/câbles | Merqury City et Snowdream |
+| Compteurs installés et commandes de comptage | Merqury City et Pipedream |
+| Réactions Roller / objets pouvant être mis en mouvement | Garibaldi, Snowdream, Elysium, Mesa, Merqury, Tokyo, Alaska, tutoriel |
+| Flexion des clôtures | Garibaldi, Snowdream, Merqury, Tokyo |
+| Drapeaux animés par le vent | Snowdream, Elysium, Mesa, Tokyo |
+| Émetteurs de particules, dont feux d'artifice | Les onze mondes |
+
+Tokyo conserve aussi des commandes d'animation/fragments sans consommateur
+actif, notamment derrière la destruction des vitres. Certaines animations
+demandées ne disposent pas de courbes utilisables dans le modèle ; leur nom
+ne prouve pas un mouvement qu'il faudrait inventer. Les canaux de fin/région,
+les propriétés combinées et la propriété des copies mobiles restent à compléter.
+
+Les boutons de Tokyo à texture temporaire sont maintenant importés : 75
+receveurs, durées de 0,5 ou 1 seconde. Un contact de 0,5 seconde, son nettoyage et son fonctionnement
+après redémarrage ordinaire ont été observés. Le détail et les limites des
+observations sont dans le plan d'implémentation.
+
+### Inventaire de départ
 
 | Map | Comportements source manquants ou partiels | Preuves dans les données source |
 | --- | --- | --- |

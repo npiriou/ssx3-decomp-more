@@ -23,7 +23,7 @@ from tricky_courses import COURSES
 
 
 PROPERTY_TYPES = {
-    0: "roller_response", 7: "directional_push", 10: "uv_scroll",
+    0: "roller_response", 6: "counter", 7: "directional_push", 10: "uv_scroll",
     11: "texture_flip", 12: "fence_flex", 13: "flag_wind",
     14: "cracked_glass", 15: "lap_lift", 18: "vertical_lift",
     20: "mesh_break_animation", 24: "tube_exit",
@@ -76,6 +76,9 @@ def audit(course, iso: Path, overlay: Path) -> dict:
                     for mode, report in native.items()}
     scroll_ids = {mode: set(report.get("source_uv_scroll_instances", [])) for mode, report in native.items()}
     flip_ids = {mode: set(report.get("source_texture_flip_instances", [])) for mode, report in native.items()}
+    rail_ids = {mode: set(report.get("source_scripted_rail_switches", []))
+                | {int(rail) for rail in report.get("source_initial_rail_states", {})}
+                for mode, report in native.items()}
 
     # ActOnInstance names an effect header on another instance, not a slot.
     # Collision roots alone miss sewer gates, falling trees and wall fragments.
@@ -130,6 +133,8 @@ def audit(course, iso: Path, overlay: Path) -> dict:
                         status = "native_material_script"
                     elif kind == "texture_flip" and target in flip_ids.get(mode, set()):
                         status = "native_material_script"
+                    elif kind == "rail_switch" and node["words"][0] in rail_ids.get(mode, set()):
+                        status = "native_rail_state_script"
                     elif manifest is None:
                         status = "unprepared"
                     elif kind == "roller_response":
@@ -197,8 +202,9 @@ def main() -> None:
         report = audit(course, args.tricky_iso, args.overlay)
         reports.append(report)
         missing = {(entry["instance"], entry["mechanic"]) for entry in report["instances"]
-                   if entry["status"] == "source_mechanic_missing"}
-        print(f"{course.name}: {len(missing)} object/mechanic pairs absent; "
+                   if entry["status"] in ("source_mechanic_missing", "visual_effect_missing",
+                       "source_node_missing_native_contact_not_assessed")}
+        print(f"{course.name}: {len(missing)} object/mechanic pairs without an imported consumer; "
               f"{len(report['showoff_time_gate_groups'])} Showoff gate stations", flush=True)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps({"method": "static source/import inspection, no play verification",
