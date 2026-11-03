@@ -98,6 +98,8 @@ class NativeInteractives:
         self.posts = []
         self.bindings = []
         self.object_bindings = {}
+        self.emitter_anchors = {}
+        self.contact_only_instances = set()
         self.rail_initial = {}
         self.functions = []
         self.function_ids = {}

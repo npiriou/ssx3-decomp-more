@@ -52,6 +52,7 @@ pub fn restart() {
     crate::custom_rail_rules::restart();
     crate::custom_script_materials::restart();
     crate::custom_roller_runtime::restart();
+    crate::custom_initial_debounce::restart();
     *QUEUE.lock().unwrap() = Queue::default();
 }
 

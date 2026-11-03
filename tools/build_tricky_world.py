@@ -226,6 +226,14 @@ def build(SSX3_iso: Path, tricky_iso: Path, output: Path, *,
         if properties["flags"] & 32:
             collision_bindings.append({"instance": rid, "source_instance": index,
                                        **properties})
+    for owner, rid in interactives.emitter_anchors.items():
+        instance = pbd["instances"][owner]
+        payload = pack_instance(instance, model_layouts[instance["model_id"]],
+                                section_id, leaf_id, resource_id=rid,
+                                model_resource_id=model_ids[instance["model_id"]])
+        shared.extend(pack_resource(3, section_id, rid, payload))
+        instance_bounds.append((instance["bounds_min"], instance["bounds_max"]))
+        instance_flags.append(0)
     # Retail target patches have these two constant words and a constant
     # 12-byte tail. The remaining header flags are taken from Tricky where
     # meanings are known. The section byte at +0x155 must identify GARI,
@@ -328,7 +336,7 @@ def build(SSX3_iso: Path, tricky_iso: Path, output: Path, *,
         "model_count": len(model_ids) + len(interactives.model_ids),
         "material_count": len(material_ids) + len(interactives.material_ids),
         "source_model_count": len(models),
-        "instance_count": len(race_instances) + len(interactives.posts),
+        "instance_count": len(race_instances) + len(interactives.posts) + len(interactives.emitter_anchors),
         **interactives.summary(),
         "collision_count": physics_base + len(collision_data["physics"]),
         "mesh_collision_count": physics_base,

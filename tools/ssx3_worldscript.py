@@ -42,7 +42,8 @@ def pack_world_script(pbd: dict, models: list[dict], source: dict,
             parts = max(parts, len(source["physics"][index]["bodies"]))
         binding = (interactives.object_bindings.get(instance_id, 0xffffffff)
                    if interactives else 0xffffffff)
-        key = (source_index, parts, binding)
+        contact_only = bool(interactives and instance_id in interactives.contact_only_instances)
+        key = (source_index, parts, binding, contact_only)
         if key not in unique:
             unique[key] = len(offsets)
             offsets.append(len(properties))
@@ -55,6 +56,10 @@ def pack_world_script(pbd: dict, models: list[dict], source: dict,
             # Native per-part data: mass, restitution, contact flags and
             # signed surface. Bit 0 bounces; bit 1 records wall contacts.
             contact_flags = 2 | (1 if prop["flags"] & 0x80 else 0)
+            if contact_only:
+                # Use the same contact contract as the working breakable
+                # triggers: retain notifications, suppress the bounce bit.
+                contact_flags = 2
             native_surface = surface(prop["surface"]).native_id
             part_data = struct.pack("<2fHh", prop["mass"], prop["bounce"], contact_flags, native_surface)
             properties.extend(part_data * parts)
@@ -67,6 +72,14 @@ def pack_world_script(pbd: dict, models: list[dict], source: dict,
                 offsets.append(len(properties))
                 properties.extend(interactives.post_properties)
             instance_properties.append(unique[key])
+        if interactives.emitter_anchors:
+            # Invisible, collision-free native hosts keep detached pop
+            # emitters alive after their animated source receives DeadNode.
+            key = ("emitter-anchor",)
+            unique[key] = len(offsets)
+            offsets.append(len(properties))
+            properties.extend(struct.pack("<4I2fHh", 0, 0, 0xffffffff, 0xffffffff, 0., 0., 0, -1))
+            instance_properties.extend([unique[key]] * len(interactives.emitter_anchors))
     if len(offsets) > 65535:
         raise FormatError("custom world has too many native object properties")
     out = bytearray(92)

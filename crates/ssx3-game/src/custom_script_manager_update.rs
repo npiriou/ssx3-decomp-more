@@ -61,6 +61,7 @@ pub fn wscript_man_update(c: &mut Cpu) {
                     c.g[S2][0] = c.g[A0][0];
                     crate::custom_script_queue::begin_update(c);
                     crate::custom_script_materials::begin_update(c);
+                    crate::custom_initial_debounce::begin_update(c);
                     call_ptr(c, 0x0030_9118, 0x0030_92a0)?;
                     pc = 0x0030_92a0;
                 }

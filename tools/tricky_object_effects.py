@@ -91,6 +91,8 @@ def pack_object_scripts(ssf, pbd, models, collision, instances, source_to_instan
     material_lifetimes = set()
     counters = {}
     rollers = set()
+    pop_bursts = set()
+    initial_debounce = set()
     receiver_kinds = {}
     tasks = {}
     task_ids = {}
@@ -159,6 +161,27 @@ def pack_object_scripts(ssf, pbd, models, collision, instances, source_to_instan
         result.append((owner, {"main": -1, "words": (), "offset": -1, "scope": scope}))
         return result
 
+    # Pop actors consume contact with detached bursts followed by a hard
+    # hide. They are not rigid obstacles. Recognize their authored graph,
+    # rather than animal/model names. Other emitter families remain separate.
+    popping = set()
+    for owner in sorted(selected - set(interactives.replacements)):
+        prop = collision["properties"][collision["instance_properties"][owner]]
+        if prop["effect_slot"] < 0:
+            continue
+        chain = slots[prop["effect_slot"]][1]
+        if chain < 0:
+            continue
+        nodes = [node for target, node in expand(chains[chain], owner, {(owner, chain)})
+                 if target == owner]
+        bursts = [node for node in nodes if node["main"] == 2]
+        hard_hide = any(node["main"] == 0 and node["words"] == (5, 4) for node in nodes)
+        if hard_hide and bursts and all(
+                len(node["words"]) == 52 and node["words"][0] == 0
+                and node["words"][50] == 18 and float_value(node["words"][3]) >= 0
+                for node in bursts):
+            popping.add(owner)
+
     def compile_task(items, root, native_slot):
         # Scope serials are local compiler labels, not runtime identity. A
         # canonical topology key lets loops across waits reuse their function.
@@ -225,6 +248,24 @@ def pack_object_scripts(ssf, pbd, models, collision, instances, source_to_instan
                         commands.append((118, []))
             elif owner in interactives.replacements:
                 continue
+            elif main == 2 and words[0] == 0 and owner in popping:
+                if len(words) != 52 or not all(math.isfinite(float_value(v)) for v in words[3:50]):
+                    raise FormatError("invalid Tricky pop emitter parameters")
+                if words[1] > 4096 or words[2] > 64 or words[51] > 4:
+                    raise FormatError("Tricky pop emitter exceeds native limits")
+                if owner not in interactives.emitter_anchors:
+                    interactives.emitter_anchors[owner] = (
+                        len(instances) + len(interactives.posts) + len(interactives.emitter_anchors))
+                anchor = (interactives.emitter_anchors[owner] << 8) | section
+                params = list(words[1:])
+                # Shared particle sprite numbers differ between the games:
+                # Tricky18 is a white streak; SSX3's18 is an impact image.
+                # SSX3's neutral white 'part'20 preserves the source RGBA
+                # curves. All source launch/lifetime/count fields stay raw.
+                params[49] = 20
+                commands.append((25, [(i, value, 1 if i in (0, 1, 49, 50) else 2)
+                                      for i, value in enumerate(params)] + [(54, anchor, 1)]))
+                pop_bursts.add((owner, node["offset"]))
             elif main == 13:
                 if words != (0,):
                     raise FormatError("unsupported Tricky reset-zone parameters")
@@ -307,6 +348,11 @@ def pack_object_scripts(ssf, pbd, models, collision, instances, source_to_instan
                     raise FormatError("invalid Tricky debounce duration")
                 rid = (source_to_instance[owner] << 8) | section
                 commands.append((1, [(0, rid, 1), (1, words[1], 2)]))
+                if native_slot == 1:
+                    # Loading/briefing must not consume the source start
+                    # guard before the native three-second countdown.
+                    commands.append((123, [(0, rid, 1)]))
+                    initial_debounce.add(owner)
             elif main == 0 and words[0] == 10:
                 if len(words) != 7 or not all(math.isfinite(float_value(v)) for v in words[2:]):
                     raise FormatError("invalid Tricky UV scroll parameters")
@@ -418,7 +464,7 @@ def pack_object_scripts(ssf, pbd, models, collision, instances, source_to_instan
     # Do not schedule loops consisting only of unimplemented sounds/emitters.
     # Keep every continuation which reaches a supported action, including
     # through other continuations; remove only code with no native consumer.
-    meaningful = {2, 3, 4, 5, 9, 13, 21, 22, 28, 111, 112, 119, 122}
+    meaningful = {1, 2, 3, 4, 5, 9, 13, 21, 22, 25, 28, 111, 112, 119, 122, 123}
 
     def action(call):
         builtin, args = call
@@ -467,6 +513,7 @@ def pack_object_scripts(ssf, pbd, models, collision, instances, source_to_instan
         if binding not in interactives.bindings:
             interactives.bindings.append(binding)
         interactives.object_bindings[owner] = (interactives.bindings.index(binding) << 8) | section
+    interactives.contact_only_instances = popping
     return {"native_object_animations": sum(kind == 256 for kind in records.values()),
             "native_delta_animations": sum(kind == 257 for kind in records.values()),
             "native_combo_animations": sum(kind == 258 for kind in records.values()),
@@ -484,6 +531,10 @@ def pack_object_scripts(ssf, pbd, models, collision, instances, source_to_instan
             "source_finite_material_properties": sorted(material_lifetimes),
             "source_counter_configs": [[owner, *config] for owner, config in sorted(counters.items())],
             "source_roller_instances": sorted(rollers),
+            "source_initial_debounce_instances": sorted(initial_debounce),
+            "source_pop_burst_nodes": sorted(pop_bursts),
+            "source_contact_only_instances": sorted(popping),
+            "native_emitter_anchors": [[owner, rid] for owner, rid in interactives.emitter_anchors.items()],
             "source_leave_latches": sorted(owner for owner, slot in roots if slot == 3),
             "source_end_latches": sorted(owner for owner, slot in roots if slot == 4),
             "native_deferred_functions": len(live_tasks),
