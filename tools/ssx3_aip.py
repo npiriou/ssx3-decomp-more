@@ -132,11 +132,15 @@ def _native_path_records(ai: list[bytes], race: list[bytes],
         else:
             native = []
             remaining = struct.unpack_from("<f", record, 12)[0]
-            for key, _, start, end in source:
+            for key, value, start, end in source:
                 if key == 11 and checkpoints:
                     checkpoint = min(range(len(checkpoints)),
                                      key=lambda item: abs(checkpoints[item] - (remaining - start)))
                     native.append((18, checkpoint, start, end))
+                elif key == 12:
+                    # The native rider adapter consumes the original pass
+                    # countdown; key 12 is otherwise inert in SSX 3.
+                    native.append((12, value, start, end))
             if index == main_route[-1]:
                 finishes = [start for key, _, start, _ in source if key == 9]
                 if not finishes:
@@ -163,10 +167,26 @@ def _native_markers(ai: list[dict], race: list[dict], starts: list[int],
     if not main_route or any(index >= len(race) or index < 0 for index in main_route):
         raise FormatError("AIP main route contains a missing race path")
     markers = []
+    def route_distance(index: int, position: tuple[float, ...]) -> float:
+        # A lap course can start near the end of its circuit. Link the actual
+        # source segment rather than forcing every start onto the first path.
+        points = race[index]["points"]
+        best = math.inf
+        for a, b in zip(points, points[1:]):
+            delta = tuple(b[i] - a[i] for i in range(3))
+            length2 = sum(value * value for value in delta)
+            t = (sum((position[i] - a[i]) * delta[i] for i in range(3)) / length2
+                 if length2 else 0.)
+            t = min(max(t, 0.), 1.)
+            best = min(best, sum((position[i] - a[i] - t * delta[i]) ** 2
+                                 for i in range(3)))
+        return best
+
     for lane, path_index in enumerate(starts):
         path = ai[path_index]
+        route = min(main_route, key=lambda index: route_distance(index, path["origin"]))
         markers.append((lane, 0, *path["origin"],
-                        *_direction(path["vectors"][0]), path_index, main_route[0]))
+                        *_direction(path["vectors"][0]), path_index, route))
 
     def nearest_ai(position: tuple[float, ...]) -> int:
         return min(range(len(ai)), key=lambda index: min(

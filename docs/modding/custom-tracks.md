@@ -133,7 +133,7 @@ The ordinary pause-menu Quit path reaches the same cleanup point.
 | --- | ---: | --- |
 | Terrain | 3,885 patches | Type 1 bicubic Bezier patches |
 | Materials | 114, including retail interactive props | Type 0 WorldMaterial |
-| Textures / lightmaps | 104 / 16 | Shared type 9 / 10 resources |
+| Textures / lightmaps | 100 / 16 | Shared type 9 / 10 resources |
 | Models | 622, including retail interactive props | Type 2 MDR meshes |
 | Race instances | 3,246, including 10 native sign posts | Type 3 instances |
 | Mesh collision resources | 412 | Type 12 triangle meshes |
@@ -154,7 +154,7 @@ also contribute to the world bounds. Race/common LTG lists select scenery;
 Showoff-only instances are excluded.
 
 The builder follows Race instances to their models, material assignments and
-texture references before packaging. It imports 104 of 121 source textures;
+texture references before packaging. It imports 100 of 121 source textures;
 the native replacements below supply their own models/materials. Local model/material IDs
 are compacted together; the generated manifest preserves source-to-native
 ID maps. Shared texture IDs retain their source offsets in the appended
@@ -198,6 +198,9 @@ gameplay scripts run.
 `tools/ssx3_interactives.py` identifies the source placements by their MAP
 internal instance names. It replaces the two speed pickups, three trick
 pickups and ten intact/broken shortcut-panel pairs with retail ARA1 resources.
+Across the catalog, Showoff score gems use the complete ASS1 multiplier
+objects: yellow x2, orange x3 and red x5 (545 placements in total). Donor resource IDs are scoped to
+their source bank, including model, material, property and script references.
 Models retain their retail DMA chains and materials; native Luno scripts
 retain their internal offsets and remap only the panel's fragment handle.
 Section-wide Snow Jam processes and setup functions are excluded. The native
@@ -206,7 +209,8 @@ panel breaking and the repaired anger exclamation have been confirmed in play
 by the user. A hand-written contact dispatcher is retained as an uninstalled
 port in `custom_object_trigger.rs`; the confirmed retail dispatch stays active.
 
-World shapes and lightmaps occupy 1,546 global texture IDs. TexMan's retail
+Garibaldi reserves 1,572 global world texture IDs; the catalog maximum is
+1,646. TexMan's retail
 non-bound free list begins at 1,500, which allowed the appended lightmaps to
 overwrite global FX such as `exlm` (the angry rider's exclamation). Native
 file setup now reads the shared counts from the actual BAM.SDB before TexMan
@@ -226,6 +230,37 @@ native stored key 18, with matching checkpoint IDs across alternate paths.
 Garibaldi's three main-course gates become checkpoint indices 0, 1 and 2.
 Only supported SSX 3 AI event keys are retained. SSX 3's AI code consumes the
 converted routes; the Tricky AI is not imported.
+
+`tools/tricky_gameplay.py` reads the source SSF effect chains into a `TFX1`
+sidecar (`CODE-mode.FX`) alongside each derived archive. The runtime applies
+the authored directional pushes, vertical lifts, lap mouth and tube-end
+launch volumes to native riders, including AI. Invisible boost trigger
+meshes remain absent from the rendered scene. Velocity edits also re-prime
+the native AirPredictor, as `Rider_AddVelocity` does; changing the velocity
+field alone leaves air motion following its previous trajectory.
+
+Tokyo's stored path event 12 supplies four passes: the short start-to-tube
+approach, then three complete circuits. The tube mouth counts one pass per
+entry. Riders with passes left climb to the original altitude marker and
+leave through the authored tube-end launch; their final crossing continues
+to the native finish event below. The source altitude marker rearms the next
+crossing and restores the first TrackPath's event cursor. The original
+finish handler remains responsible for the results. AIP start markers link
+the closest main-route segment, including starts near the end of a circuit.
+Distance queries include remaining circuits for standings and AI comparisons;
+the native raw distance fields still project against the current TrackPath.
+Freestyle keeps the tube reusable without consuming Race's pass countdown;
+changing event mode reloads the matching sidecar and rider state.
+The lap/tube interpretation follows the source disc records and
+[OpenSlope's documented boost-volume research](https://github.com/swax/OpenSlope/blob/main/Unity/VRC/World/BoostVolume.cs).
+
+The path reader, path selection and distance update investigated for this
+adapter have typed Rust ports. `custom_launch_air.rs` retains a separate
+uninstalled port of the native jump routine: it adds a charged jump impulse
+and is not the authored elevator operation.
+`custom_finish_race.rs` likewise retains the inspected native arrival routine
+without replacing it: `+0x478` stores the finish tick, while `+0x470` is the
+timer since crossing the line, not the total race time.
 
 The native marker reader translates serialized types 0/1 into runtime
 start/recovery types 1/2, and resolves each marker's AIPath and TrackPath
@@ -274,6 +309,10 @@ cards, a same-session Garibaldi-to-Mesablanca switch and Alaska Race to
 Freestyle switch have also been observed. These openings establish loading
 and initial rendering, rather than a full descent of every course.
 No automated tests or replay gates are run.
+
+A windowed Tokyo Race session counted 3, 2, 1 and 0 at successive tube
+entries. A competitor completed all three full circuits and reached the
+native finish at 23,748 ticks (6:35.8); earlier entries did not finish it.
 
 Source prefab animations are currently static. Source gameplay processes,
 lights, particles and ambient audio are not executed/imported as Tricky

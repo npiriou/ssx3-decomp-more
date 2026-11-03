@@ -5457,3 +5457,7 @@
 0x0015ec98    GameCamera_UpdateStreamView
 0x003a7878    SectionAllocator_Alloc
 0x003a0eb0    UIText_SetWideStringInternal
+0x0026a180    Path_Read
+0x00112fb0    Rider_UpdateDistToFinish
+0x001127f0    Rider_SelectRacePath
+0x00113130    Rider_GetStartDistToFinish

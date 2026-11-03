@@ -34,6 +34,7 @@ from tricky_collision import parse_ssf
 from tricky_ssh import inspect_world_ssh, parse_shps, to_world_ssh
 from tricky_courses import Course, course
 from ssx3_tricky_sky import import_sky
+from tricky_gameplay import pack_gameplay
 
 
 def _verify_disc(iso: Path, serial: bytes, label: str) -> None:
@@ -80,14 +81,23 @@ def build(SSX3_iso: Path, tricky_iso: Path, output: Path, *,
     pbd_data = read_cofb_member(tricky_archive, f"data/models/{stem}.pbd")
     pbd = parse_pbd(pbd_data, True)
     models = parse_prefabs(pbd_data, pbd["counts"], pbd["offsets"])
-    collision_data = parse_ssf(read_cofb_member(tricky_archive, f"data/models/{stem}.ssf"))
+    ssf_data = read_cofb_member(tricky_archive, f"data/models/{stem}.ssf")
+    collision_data = parse_ssf(ssf_data)
     spatial = parse_ltg(read_cofb_member(tricky_archive, f"data/models/{stem}.ltg"),
                         pbd["counts"], True)
     instance_list = "race_instances" if mode == "race" else "showoff_instances"
     race_instances = sorted({index for node in spatial["nodes"]
                              for index in node[instance_list]})
+    aip_source = read_cofb_member(tricky_archive, f"data/models/{stem}.aip")
+    gameplay, gameplay_summary = pack_gameplay(
+        ssf_data, pbd, collision_data, race_instances, aip_source)
+    # These SSF volumes are physics-only. Their debug meshes must not turn
+    # into visible scenery; the native rider adapter owns their triggers.
+    boost_instances = set(gameplay_summary["source_boost_instances"])
+    race_instances = [index for index in race_instances if index not in boost_instances
+                      or collision_data["properties"][collision_data["instance_properties"][index]]["flags"] & 1]
     interactives = NativeInteractives(
-        ssb, streams, template_location,
+        ssb, streams, locations,
         read_cofb_member(tricky_archive, f"data/models/{stem}.map"),
         pbd, models, race_instances)
     # Follow Race scenery dependencies before assigning native IDs. Compact
@@ -113,9 +123,7 @@ def build(SSX3_iso: Path, tricky_iso: Path, output: Path, *,
     source_textures.update(material["texture_id"] for material in materials
                            if material["texture_id"] >= 0)
     source_lightmaps = {patch["lightmap_id"] for patch in pbd["patches"]}
-    aip, starter_paths = convert_tricky_aip(
-        read_cofb_member(tricky_archive, f"data/models/{stem}.aip"),
-        main_route=selected.main_route)
+    aip, starter_paths = convert_tricky_aip(aip_source, main_route=selected.main_route)
     textures = [(rid, body) for rid, body in parse_shps(
         read_cofb_member(tricky_archive, f"data/models/{stem}.ssh")) if rid in source_textures]
     lightmaps = [(rid, body) for rid, body in parse_shps(
@@ -267,9 +275,11 @@ def build(SSX3_iso: Path, tricky_iso: Path, output: Path, *,
     archive = pack_bigf(list(rebuilt_members.items()))
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_bytes(archive)
+    output.with_suffix(".FX").write_bytes(gameplay)
     return {
         "course_id": selected.id, "course_name": selected.name,
         "mode": mode, "source_archive": selected.archive,
+        **gameplay_summary,
         "sky": sky_summary,
         "output": str(output), "archive_bytes": len(archive),
         "location_index": section_id, "leaf_stream": leaf_id,

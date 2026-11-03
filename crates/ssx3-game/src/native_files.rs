@@ -183,6 +183,10 @@ pub fn install() -> bool {
         Source::Iso(_) => false,
     };
     crate::custom_tracks::set_assets_available(custom_assets);
+    crate::custom_course_rules::set_root(match &src {
+        Source::Overlay { dir, .. } | Source::Dir(dir) if custom_assets => Some(dir.clone()),
+        _ => None,
+    });
     let texture_slots = match &src {
         Source::Overlay { dir, .. } | Source::Dir(dir) if custom_assets => {
             world_texture_slots(dir).unwrap_or(1500)

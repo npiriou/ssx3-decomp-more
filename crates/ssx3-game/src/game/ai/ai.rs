@@ -1810,6 +1810,7 @@ pub fn ai_reset_riders(c: &mut Cpu) {
 /// `void AI_Restart(AI *ai, int state)` (0x129768): reset the focus and
 /// danger managers, clear the path pointer and reselect the race state.
 pub fn ai_restart(c: &mut Cpu) {
+    crate::custom_course_rules::restart();
     call::guest(c, |c| {
         c.cycles += 23;
         let frame = Frame::open(c, 0x30);

@@ -29,6 +29,7 @@ def main() -> None:
     parser.add_argument("--ui-only", action="store_true")
     args = parser.parse_args()
     sources = sorted(Path(__file__).parent.glob("ssx3_*.py")) + sorted(Path(__file__).parent.glob("tricky_*.py"))
+    sources = [p for p in sources if p.name not in ("ssx3_bonus_menu.py", "tricky_ui_assets.py")]
     sources += [Path(__file__).with_name("build_tricky_world.py")]
     fingerprint = hashlib.sha256(b"".join(p.name.encode() + p.read_bytes() for p in sources)).hexdigest()
     results = []
@@ -38,10 +39,11 @@ def main() -> None:
         for mode in selected.modes:
             output = args.overlay / f"DATA/WORLDS/TRICKY/{selected.code}-{mode}.BIG"
             manifest = output.with_suffix(".json")
+            complete = output.exists() and output.with_suffix(".FX").exists()
             previous = json.loads(manifest.read_text()) if manifest.exists() else {}
-            if args.ui_only and not (output.exists() and previous):
+            if args.ui_only and not (complete and previous):
                 raise ValueError(f"course archive is not prepared: {output}")
-            if args.ui_only or (not args.force and output.exists() and previous.get("importer") == fingerprint):
+            if args.ui_only or (not args.force and complete and previous.get("importer") == fingerprint):
                 report = previous["world"]
                 print(f"Retained {selected.name} / {mode}", flush=True)
             else:

@@ -1,4 +1,4 @@
-"""Place retail SSX 3 pickups and breakable shortcut signs in Garibaldi.
+"""Place complete native SSX 3 pickups and breakable shortcut signs in Tricky worlds.
 
 The donor IDs below are the USA BAM.PHM/BAM.PSM named instances. Keep their
 MDR/DMA data, object properties and Luno functions together: drawing a model
@@ -78,17 +78,20 @@ def prefab_bounds(model):
 
 
 class NativeInteractives:
-    # mdl_ARA1_speedboost_1001, mdl_ARA1_trickboost_1000,
-    # mdl_ARA1_shortcut_02, mdl_ARA1_shortcutbreak_02, shortcutpost_02.
-    DONORS = {"speed": 1383, "trick": 847, "glass": 900,
-              "shards": 242, "post": 1415}
+    # Keep each RID with its source bank: ARA1 and ASS1 reuse local IDs.
+    # ASS1 multia/b/c touch scripts award the native x2/x3/x5 multipliers.
+    DONORS = {"speed": ("ARA1", 1383), "trick": ("ARA1", 847),
+              "glass": ("ARA1", 900), "shards": ("ARA1", 242),
+              "post": ("ARA1", 1415), "score2": ("ASS1", 2023),
+              "score3": ("ASS1", 976), "score5": ("ASS1", 2249)}
 
-    def __init__(self, ssb, streams, location, source_map, pbd, models, instances):
+    def __init__(self, ssb, streams, locations, source_map, pbd, models, instances):
         self.resources = {}
-        for index in range(location["first_stream"], location["last_stream"] + 1):
-            for kind, section, rid, payload in _records(decode_stream(ssb, streams[index])):
-                self.resources[kind, rid] = payload
-        self.script = self.resources[16, 0]
+        for bank in sorted({bank for bank, _ in self.DONORS.values()}):
+            location = next(item for item in locations if item["name"] == bank)
+            for index in range(location["first_stream"], location["last_stream"] + 1):
+                for kind, section, rid, payload in _records(decode_stream(ssb, streams[index])):
+                    self.resources[bank, kind, rid] = payload
         self.names = map_names(source_map)
         self.replacements = {}
         self.posts = []
@@ -106,6 +109,8 @@ class NativeInteractives:
                 self.replacements[index] = "speed"
             elif name.startswith("Mdl_TrickBoost_"):
                 self.replacements[index] = "trick"
+            elif match := re.fullmatch(r"Gem_TrickMultiplier_(?:YellowX(2)|OrangeX(3)|RedX(5))_.*", name):
+                self.replacements[index] = "score" + next(value for value in match.groups() if value)
             elif re.match(r"Mdl_Lcd_ScreenLogo(?:Red)?_", name):
                 self.replacements[index] = "glass"
         for index, kind in list(self.replacements.items()):
@@ -125,16 +130,19 @@ class NativeInteractives:
     def prepare(self, section, leaf, model_start, material_start, source_to_instance):
         self.section = section
         self.leaf = leaf
-        model_sources = sorted({u32(self.resources[3, donor], 0x80) >> 8
-                                for donor in self.DONORS.values()})
-        self.model_ids = {rid: model_start + i for i, rid in enumerate(model_sources)}
+        kinds = set(self.replacements.values())
+        if self.posts:
+            kinds.add("post")
+        model_sources = sorted({(bank, u32(self.resources[bank, 3, donor], 0x80) >> 8)
+                                for bank, donor in (self.DONORS[kind] for kind in kinds)})
+        self.model_ids = {source: model_start + i for i, source in enumerate(model_sources)}
         material_sources = set()
-        for rid in model_sources:
-            model = self.resources[2, rid]
-            material_sources.update(u32(model, 44 + i * 4) >> 8
+        for bank, rid in model_sources:
+            model = self.resources[bank, 2, rid]
+            material_sources.update((bank, u32(model, 44 + i * 4) >> 8)
                                     for i in range(u32(model, 40)))
-        self.material_ids = {rid: material_start + i
-                             for i, rid in enumerate(sorted(material_sources))}
+        self.material_ids = {source: material_start + i
+                             for i, source in enumerate(sorted(material_sources))}
         self.post_ids = {source: len(source_to_instance) + i
                          for i, (source, _) in enumerate(self.posts)}
         self.placement = {}
@@ -153,18 +161,19 @@ class NativeInteractives:
             self.properties[source] = self._property(donor, remap)
             self.instance_payloads[source] = self._instance(
                 donor, source_to_instance[source], self.placement[source])
-        self.post_properties = self._property(self.DONORS["post"], {})
+        self.post_properties = self._property(self.DONORS["post"], {}) if self.posts else None
 
     def _placement(self, source, kind):
         instance = self.source["instances"][source]
         center = [(a + b) / 2 for a, b in zip(instance["bounds_min"], instance["bounds_max"])]
-        donor = self.resources[3, self.DONORS[kind]]
+        bank, donor_id = self.DONORS[kind]
+        donor = self.resources[bank, 3, donor_id]
         original = donor_matrix(donor)
         native_center = local_point(original, struct.unpack_from("<3f", donor, 80))
         if kind == "glass":
             source_model = self.source_models[instance["model_id"]]
             bounds = prefab_bounds(source_model)
-            native_bounds = model_bounds(self.resources[2, u32(donor, 128) >> 8])
+            native_bounds = model_bounds(self.resources[bank, 2, u32(donor, 128) >> 8])
             width = (bounds[3] - bounds[0]) / (native_bounds[4] - native_bounds[1])
             height = (bounds[5] - bounds[2]) / (native_bounds[5] - native_bounds[2])
             source_matrix = instance["matrix"]
@@ -180,12 +189,13 @@ class NativeInteractives:
                        for i in range(3)]
         return [a + [0.] for a in axes] + [translation + [1.]]
 
-    def _instance(self, donor_id, rid, matrix):
-        donor = self.resources[3, donor_id]
+    def _instance(self, donor_ref, rid, matrix):
+        bank, donor_id = donor_ref
+        donor = self.resources[bank, 3, donor_id]
         out = bytearray(donor)
-        bounds_donor = self.DONORS["glass"] if donor_id == self.DONORS["shards"] else donor_id
-        model_id = u32(self.resources[3, bounds_donor], 128) >> 8
-        bounds = model_bounds(self.resources[2, model_id])
+        bounds_bank, bounds_id = self.DONORS["glass"] if donor_ref == self.DONORS["shards"] else donor_ref
+        model_id = u32(self.resources[bounds_bank, 3, bounds_id], 128) >> 8
+        bounds = model_bounds(self.resources[bounds_bank, 2, model_id])
         corners = [transform(matrix, point)
                    for point in itertools.product(*[(bounds[i], bounds[i + 3]) for i in range(3)])]
         low = [min(p[i] for p in corners) for i in range(3)]
@@ -197,21 +207,22 @@ class NativeInteractives:
                          *center, radius, *low, *high)
         struct.pack_into("<I", out, 120, (rid << 8) | self.section)
         struct.pack_into("<BhI", out, 125, self.section, self.leaf,
-                         (self.model_ids[u32(donor, 128) >> 8] << 8) | self.section)
+                         (self.model_ids[bank, u32(donor, 128) >> 8] << 8) | self.section)
         # These are runtime pointers, resolved from the copied MDR/script.
         struct.pack_into("<2I", out, 136, 0, 0)
         return bytes(out)
 
-    def _function(self, handle, remap):
+    def _function(self, bank, handle, remap):
         if handle == 0xffffffff:
             return handle
-        key = (handle, tuple(sorted(remap.items())))
+        key = (bank, handle, tuple(sorted(remap.items())))
         if key not in self.function_ids:
             index = handle >> 8
-            pointers = u32(self.script, 0x3c)
-            start = u32(self.script, pointers + index * 4)
-            end = u32(self.script, pointers + (index + 1) * 4)
-            code = self.script[start:end]
+            script = self.resources[bank, 16, 0]
+            pointers = u32(script, 0x3c)
+            start = u32(script, pointers + index * 4)
+            end = u32(script, pointers + (index + 1) * 4)
+            code = script[start:end]
             if code[:4] != b"LUN\0":
                 raise FormatError("retail interactive function is not Luno bytecode")
             for old, new in remap.items():
@@ -224,8 +235,9 @@ class NativeInteractives:
             self.functions.append(code)
         return (self.function_ids[key] << 8) | self.section
 
-    def _property(self, donor_id, remap):
-        script = self.script
+    def _property(self, donor_ref, remap):
+        bank, donor_id = donor_ref
+        script = self.resources[bank, 16, 0]
         index = struct.unpack_from("<H", script, u32(script, 0x48) + donor_id * 2)[0]
         table = u32(script, 0x50)
         start = u32(script, 0x40) + u32(script, table + index * 4)
@@ -234,7 +246,7 @@ class NativeInteractives:
         binding = u32(out, 8)
         if binding != 0xffffffff:
             original = struct.unpack_from("<6I", script, u32(script, 0x1c) + (binding >> 8) * 24)
-            mapped = tuple(self._function(h, remap if h != 0xffffffff else {}) for h in original)
+            mapped = tuple(self._function(bank, h, remap if h != 0xffffffff else {}) for h in original)
             if mapped not in self.bindings:
                 self.bindings.append(mapped)
             struct.pack_into("<I", out, 8, (self.bindings.index(mapped) << 8) | self.section)
@@ -242,28 +254,33 @@ class NativeInteractives:
 
     def records(self):
         """Native model/material payloads; texture IDs remain global retail IDs."""
-        for source, rid in self.material_ids.items():
-            yield 0, rid, self.resources[0, source]
-        for source, rid in self.model_ids.items():
-            out = bytearray(self.resources[2, source])
+        for (bank, source), rid in self.material_ids.items():
+            yield 0, rid, self.resources[bank, 0, source]
+        for (bank, source), rid in self.model_ids.items():
+            out = bytearray(self.resources[bank, 2, source])
             struct.pack_into("<I", out, 0, (rid << 8) | self.section)
             for i in range(u32(out, 40)):
                 material = u32(out, 44 + i * 4) >> 8
                 struct.pack_into("<I", out, 44 + i * 4,
-                                 (self.material_ids[material] << 8) | self.section)
+                                 (self.material_ids[bank, material] << 8) | self.section)
             yield 2, rid, bytes(out)
         for source, _ in self.posts:
             rid = self.post_ids[source]
             yield 3, rid, self._instance(self.DONORS["post"], rid, self.placement[source])
 
     def textures(self):
-        ids = set()
-        for source in self.material_ids:
-            ids.update(t for t in struct.unpack_from("<3h", self.resources[0, source]) if t >= 0)
-        for rid in sorted(ids):
-            if (9, rid) not in self.resources:
-                raise FormatError(f"retail interactive texture {rid} missing from donor section")
-            yield rid, self.resources[9, rid]
+        images = {}
+        for bank, source in self.material_ids:
+            for rid in struct.unpack_from("<3h", self.resources[bank, 0, source]):
+                if rid < 0:
+                    continue
+                body = self.resources.get((bank, 9, rid))
+                if body is None:
+                    raise FormatError(f"native pickup texture {rid} missing from {bank}")
+                if rid in images and images[rid] != body:
+                    raise FormatError(f"conflicting native shared texture {rid}")
+                images[rid] = body
+        yield from sorted(images.items())
 
     def pack_script_tables(self, out):
         # Header+0x10 contains section-wide callback handles, not scalar
@@ -282,9 +299,11 @@ class NativeInteractives:
     def summary(self):
         return {"native_speed_pickups": sum(k == "speed" for k in self.replacements.values()),
                 "native_trick_pickups": sum(k == "trick" for k in self.replacements.values()),
+                "native_score_pickups": sum(k.startswith("score") for k in self.replacements.values()),
                 "native_breakable_shortcuts": len(self.posts),
                 "native_interactive_functions": len(self.functions),
                 "native_replacements": [
                     {"source_instance": source, "source_name": self.names[source],
-                     "kind": kind, "native_donor_instance": self.DONORS[kind]}
+                     "kind": kind, "native_donor_location": self.DONORS[kind][0],
+                     "native_donor_instance": self.DONORS[kind][1]}
                     for source, kind in sorted(self.replacements.items())]}

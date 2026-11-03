@@ -29,6 +29,10 @@ pub mod audio;
 pub mod call;
 /// Stable host IDs for additional Single Event peaks and courses.
 pub mod custom_tracks;
+pub mod custom_course_rules;
+pub mod custom_race_path_select;
+pub mod custom_race_distance;
+pub mod custom_base_path_read;
 pub mod bonus_menu_mode;
 pub mod custom_path_reader;
 pub mod custom_peak_widgets;
@@ -174,6 +178,9 @@ pub fn overrides() -> Vec<(u32, GuestFn, &'static str)> {
     v.extend_from_slice(custom_event_menu_update::OVERRIDES);
     v.extend_from_slice(custom_menu_selection::OVERRIDES);
     v.extend_from_slice(custom_text_id::OVERRIDES);
+    v.extend_from_slice(custom_race_path_select::OVERRIDES);
+    v.extend_from_slice(custom_race_distance::OVERRIDES);
+    v.extend_from_slice(custom_base_path_read::OVERRIDES);
     v.extend_from_slice(custom_camera_stream::OVERRIDES);
     v.extend_from_slice(custom_section_alloc::OVERRIDES);
     v.extend_from_slice(custom_text_id_string::OVERRIDES);

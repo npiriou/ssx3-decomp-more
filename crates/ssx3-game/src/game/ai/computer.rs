@@ -220,6 +220,7 @@ pub const OVERRIDES: &[(u32, GuestFn, &str)] = &[
         "Rider_GetDistToFinish",
     ),
     (0x0011_3138, air_predictor_ctor, "AirPredictor_ctor"),
+    (0x0011_3130, rider_get_start_dist_to_finish, "Rider_GetStartDistToFinish"),
     (0x0011_3170, rider_dtor_free, "Rider_dtorFree"),
 ];
 
@@ -1058,6 +1059,9 @@ pub fn computer_actor_rider_is_far_behind_human(c: &mut Cpu) {
             let rider = Addr((c.g[S0][0] as u32).wrapping_add(0x18)).lw(c);
             c.g[V1][0] = rider;
             let limit = Addr(rider as u32).off(0x4d0).read_fpu(c);
+            let limit = FpuF32(
+                crate::custom_course_rules::distance(c, rider as u32, f32::from_bits(limit.0)).to_bits(),
+            );
             let threshold = Addr(rider as u32).off(0xdc).read_fpu(c);
             abi::set_fpr(c, 1, limit);
             abi::set_fpr(c, 2, threshold);
@@ -1099,6 +1103,9 @@ pub fn computer_actor_rider_is_far_ahead_of_human(c: &mut Cpu) {
             let rider = Addr((c.g[S0][0] as u32).wrapping_add(0x18)).lw(c);
             c.g[V1][0] = rider;
             let limit = Addr(rider as u32).off(0x4d0).read_fpu(c);
+            let limit = FpuF32(
+                crate::custom_course_rules::distance(c, rider as u32, f32::from_bits(limit.0)).to_bits(),
+            );
             let threshold = Addr(rider as u32).off(0xe0).read_fpu(c);
             abi::set_fpr(c, 1, limit);
             abi::set_fpr(c, 2, threshold);
@@ -1239,6 +1246,7 @@ pub(crate) const RACE_EVENTS: u32 = 0x004a_5d60;
 /// Tick rate: 500 units off the path, the reselect is forced once a second
 /// (`now % reselect_period`, 60 ticks at 60 Hz).
 pub fn rider_update_race_progress(c: &mut Cpu) {
+    let boost = crate::custom_course_rules::update(c, c.g[A0][0] as u32);
     guest(c, |c| {
         c.cycles += 30;
         let frame = Frame::open(c, 0xa0);
@@ -1258,6 +1266,33 @@ pub fn rider_update_race_progress(c: &mut Cpu) {
         c.g[A2][0] = c.lw(p(c.g[S2][0] as u32, rider::RACE_ENTRY_COUNT));
         c.g[A2][0] = shl32(c.g[A2][0], 4);
         call_ptr(c, callee::EA_MEM_COPY, 0x00112378)?;
+        if let Some(boost) = boost {
+            // Ground motion projects away an elevator's vertical velocity.
+            // Enter native Air before it processes that authored impulse.
+            let registers = c.g;
+            let floats = c.f;
+            if boost.take_off {
+                c.g[A0][0] = c.g[S2][0];
+                c.g[A1][0] = 1;
+                call_ptr(c, 0x0011_fe78, 0x0011_2378)?;
+                c.g[A0][0] = c.g[S2][0];
+                c.g[A1][0] = 0;
+                call_ptr(c, 0x0011_fec8, 0x0011_2378)?;
+            }
+            // Match Rider_AddVelocity: air motion uses the predictor's saved
+            // trajectory, so a velocity/altitude edit must re-prime it too.
+            let rider = c.g[S2][0] as u32;
+            let owner = c.bus.read32(rider + 0x77c);
+            if owner != 0 && c.bus.read32(owner + 0xde0) == 1 {
+                c.g[A0][0] = c.lw(rider + 0x788);
+                c.g[A1][0] = sx(rider + 0x110);
+                c.g[A2][0] = sx(rider + 0x1e0);
+                c.f[12] = c.bus.read32(gp(c, -0x7880));
+                call_ptr(c, 0x0011_35b8, 0x0011_2378)?;
+            }
+            c.g = registers;
+            c.f = floats;
+        }
         let rider = c.g[S2][0] as u32;
         c.g[A1][0] = sx(p(sp, 0x10));
         c.g[A2][0] = sx(p(sp, 0x14));
@@ -2999,11 +3034,21 @@ pub fn rider_v14(c: &mut Cpu) {
 // Trivial leaves and syscall stubs.
 
 /// `float func_00113128(Rider *r)` (0x113128): the rider's distance to the
-/// finish line, a plain field read at `+0x4d0`. (The reference has assembly
-/// only; the generated body reads f0 and returns.)
+/// finish line, a field read at `+0x4d0`. Custom lap races include future
+/// circuits in this query; the raw field remains local to the current path.
 pub fn rider_get_dist_to_finish(c: &mut Cpu) {
     c.cycles += 2;
-    c.lwc1(0, r32(c, A0).wrapping_add(0x4d0));
+    let rider = r32(c, A0);
+    c.lwc1(0, rider.wrapping_add(0x4d0));
+    let local = f32::from_bits(c.f[0]);
+    c.f[0] = crate::custom_course_rules::distance(c, rider, local).to_bits();
+    abi::ret(c);
+}
+
+/// Native initial distance, captured by the rider at the start marker.
+pub fn rider_get_start_dist_to_finish(c: &mut Cpu) {
+    c.cycles += 2;
+    c.lwc1(0, r32(c, A0).wrapping_add(0x4d8));
     abi::ret(c);
 }
 
@@ -4674,6 +4719,16 @@ pub(crate) fn sd(c: &mut Cpu, a: u32, v: u64) {
 /// event, and for event 1 finish a still-running rider, for event 11 forward
 /// the event's index to the active camera trigger list.
 pub fn rider_handle_race_path_event(c: &mut Cpu) {
+    if crate::custom_course_rules::path_event(
+        c,
+        c.g[A0][0] as u32,
+        c.g[A1][0] as u32,
+        c.g[A2][0] == 0 && c.g[A3][0] != 0,
+        c.g[A3][0] != 0,
+    ) {
+        crate::abi::ret(c);
+        return;
+    }
     let frame = Frame::open(c, 0x40);
     'b_10e6d8: {
         'b_10e6d4: {
