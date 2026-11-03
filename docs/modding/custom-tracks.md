@@ -68,7 +68,8 @@ The retail allocator's packing, resource sizes and texture pixels are unchanged.
 
 The native UI additions live in the derived FE.LUI and locale file:
 
-- Peak Tricky appears above Peak 3. Host course IDs and retail UIObject IDs
+- Peak Tricky appears below Peak 1 with the native row spacing and text size.
+  Host course IDs and retail UIObject IDs
   remain separate from UIMenu child selection indices.
 - Separate native menus contain Race/Freestyle and their course lists. Custom
   rows do not index the fixed native three-peak event arrays. Each selection

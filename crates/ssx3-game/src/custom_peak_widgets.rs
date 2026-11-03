@@ -76,7 +76,7 @@ pub fn event_select_on_widget_created(c: &mut Cpu) {
             c.g[A0][0] = c.g[S1][0];
             if front_end {
                 c.cycles += 4;
-                c.g[A1][0] = if crate::custom_tracks::assets_available() { 3 } else { 2 };
+                c.g[A1][0] = 2;
                 call_ptr(c, UI_MENU_SET_SELECTION, 0x0020_0a2c)?;
                 frame.restore(c, S0, 0x30);
             } else {
@@ -88,7 +88,6 @@ pub fn event_select_on_widget_created(c: &mut Cpu) {
                 c.g[A0][0] = c.g[S1][0];
                 c.g[A1][0] = sx((c.g[A1][0] as u32).wrapping_sub(c.g[V1][0] as u32));
                 c.g[A1][0] &= 0xff;
-                if crate::custom_tracks::assets_available() { c.g[A1][0] += 1; }
                 call_ptr(c, UI_MENU_SET_SELECTION, 0x0020_0a54)?;
                 frame.restore(c, S0, 0x30);
             }

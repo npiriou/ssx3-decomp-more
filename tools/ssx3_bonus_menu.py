@@ -78,9 +78,9 @@ def add_peak_to_screen(screen: bytes) -> bytes:
         raise FormatError("Event Select peak list differs from the USA disc")
     struct.pack_into("<H", peak_list, 2, 56)
     struct.pack_into("<I", peak_list, 32, 5)
-    # Peak Tricky is visually above Peak3. The native widget hook preserves
+    # Peak Tricky follows Peak1 with the same row spacing. The widget hook preserves
     # retail child IDs independently of these UIMenu selection indices.
-    peak_list[36:36] = struct.pack("<I", PEAK4)
+    peak_list[48:48] = struct.pack("<I", PEAK4)
 
     second_header = bytearray(screen[second:second + 16])
     second_count = struct.unpack_from("<H", second_header, 14)[0]
@@ -93,9 +93,10 @@ def add_peak_to_screen(screen: bytes) -> bytes:
     if len(source) != 68 or struct.unpack_from("<H", source, 18)[0] != 50:
         raise FormatError("Peak1 layout differs from the USA disc")
     struct.pack_into("<I", bonus_property, 4, PEAK4)
-    struct.pack_into("<h", bonus_property, 18, -16)
-    struct.pack_into("<H", bonus_property, 42, 60)
-    struct.pack_into("<H", bonus_property, 46, 60)
+    # Peak3/2/1 occupy y=0/25/50; keep their exact typography and interval.
+    struct.pack_into("<h", bonus_property, 18, 75)
+    mountain_property = _row(properties, MOUNTAIN)
+    struct.pack_into("<h", mountain_property, 18, 100)
     properties.insert(properties.index(source) + 1, bonus_property)
     peak_list_property = _row(properties, PEAK_LIST)
     if struct.unpack_from("<H", peak_list_property, 38)[0] != 120:
