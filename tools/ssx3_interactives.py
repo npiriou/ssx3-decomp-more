@@ -99,6 +99,7 @@ class NativeInteractives:
         self.bindings = []
         self.object_bindings = {}
         self.emitter_anchors = {}
+        self.collision_emitter_anchors = {}
         self.contact_only_instances = set()
         self.rail_initial = {}
         self.functions = []
@@ -266,6 +267,14 @@ class NativeInteractives:
             self.function_ids[key] = len(self.functions)
             self.functions.append(code)
         return (self.function_ids[key] << 8) | self.section
+
+    def emitter_anchor(self, owner, instance_count, *, collision=False):
+        """Reserve a hidden emitter host; collision bursts use world space."""
+        anchors = self.collision_emitter_anchors if collision else self.emitter_anchors
+        if owner not in anchors:
+            anchors[owner] = (instance_count + len(self.posts)
+                              + len(self.emitter_anchors) + len(self.collision_emitter_anchors))
+        return (anchors[owner] << 8) | self.section
 
     def reserve_function(self):
         """Reserve a stable RID before compiling recursive graph references."""

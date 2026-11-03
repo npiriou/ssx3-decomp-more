@@ -245,8 +245,16 @@ def build(SSX3_iso: Path, tricky_iso: Path, output: Path, *,
         if properties["flags"] & 32:
             collision_bindings.append({"instance": rid, "source_instance": index,
                                        **properties})
-    for owner, rid in interactives.emitter_anchors.items():
+    emitter_hosts = [(owner, rid, False) for owner, rid in interactives.emitter_anchors.items()]
+    emitter_hosts += [(owner, rid, True) for owner, rid in interactives.collision_emitter_anchors.items()]
+    for owner, rid, world_space in sorted(emitter_hosts, key=lambda host: host[1]):
         instance = pbd["instances"][owner]
+        if world_space:
+            # Collision bursts already contain a world-space contact point
+            # and velocity. Keep the owner's bounds for native focus cleanup,
+            # with identity basis so the emitter does not transform them twice.
+            instance = dict(instance, matrix=[[float(row == col) for col in range(4)]
+                                              for row in range(4)])
         payload = pack_instance(instance, model_layouts[instance["model_id"]],
                                 section_id, leaf_id, resource_id=rid,
                                 model_resource_id=model_ids[instance["model_id"]])
@@ -364,7 +372,7 @@ def build(SSX3_iso: Path, tricky_iso: Path, output: Path, *,
         "source_mode_hidden_instances": sorted(mode_hidden),
         "source_mode_hidden_dynamic_targets": sorted(mode_dynamic_hidden),
         "source_force_focus_instances": sorted(focus_volumes),
-        "instance_count": len(race_instances) + len(interactives.posts) + len(interactives.emitter_anchors),
+        "instance_count": len(race_instances) + len(interactives.posts) + len(emitter_hosts),
         **interactives.summary(),
         "collision_count": physics_base + len(collision_data["physics"]),
         "mesh_collision_count": physics_base,

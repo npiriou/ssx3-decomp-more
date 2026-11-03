@@ -72,14 +72,15 @@ def pack_world_script(pbd: dict, models: list[dict], source: dict,
                 offsets.append(len(properties))
                 properties.extend(interactives.post_properties)
             instance_properties.append(unique[key])
-        if interactives.emitter_anchors:
+        anchor_count = len(interactives.emitter_anchors) + len(interactives.collision_emitter_anchors)
+        if anchor_count:
             # Invisible, collision-free native hosts keep detached pop
             # emitters alive after their animated source receives DeadNode.
             key = ("emitter-anchor",)
             unique[key] = len(offsets)
             offsets.append(len(properties))
             properties.extend(struct.pack("<4I2fHh", 0, 0, 0xffffffff, 0xffffffff, 0., 0., 0, -1))
-            instance_properties.extend([unique[key]] * len(interactives.emitter_anchors))
+            instance_properties.extend([unique[key]] * anchor_count)
     if len(offsets) > 65535:
         raise FormatError("custom world has too many native object properties")
     out = bytearray(92)

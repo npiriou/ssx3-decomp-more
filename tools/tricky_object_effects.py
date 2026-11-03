@@ -136,6 +136,7 @@ def pack_object_scripts(ssf, pbd, models, collision, instances, source_to_instan
     rollers = set()
     pop_bursts = set()
     emitter_nodes = set()
+    collision_emitter_nodes = set()
     initial_debounce = set()
     cracked_nodes = set()
     cracked_configs = {}
@@ -304,15 +305,13 @@ def pack_object_scripts(ssf, pbd, models, collision, instances, source_to_instan
                         commands.append((118, []))
             elif owner in interactives.replacements:
                 continue
-            elif main == 2 and words[0] == 0:
+            elif main == 2 and words[0] in (0, 2):
                 if len(words) != 52 or not all(math.isfinite(float_value(v)) for v in words[3:50]):
                     raise FormatError("invalid Tricky emitter parameters")
                 if words[1] > 4096 or words[2] > 64:
                     raise FormatError("Tricky emitter exceeds native limits")
-                if owner not in interactives.emitter_anchors:
-                    interactives.emitter_anchors[owner] = (
-                        len(instances) + len(interactives.posts) + len(interactives.emitter_anchors))
-                anchor = (interactives.emitter_anchors[owner] << 8) | section
+                contact = words[0] == 2
+                anchor = interactives.emitter_anchor(owner, len(instances), collision=contact)
                 params = list(words[1:])
                 # Source Main2/Sub0 creates an independent cEmitterNode
                 # from the instance's authored matrix (147cf8 ->1d8490).
@@ -320,10 +319,14 @@ def pack_object_scripts(ssf, pbd, models, collision, instances, source_to_instan
                 # later tombstones/animations on the visible source actor.
                 params[49] = particle_sprites.sprite(words[50])
                 params[50] = particle_sprites.blend(words[51])
-                commands.append((25, [(i, value, 1 if i in (0, 1, 49, 50) else 2)
+                # Collision subtype148560/148748 replaces origin/velocity
+                # with contact point/normal*authored speed, in world space.
+                # Builtin127 adapts those fields and the source rider cap,
+                # then calls this same native AddParticleData factory.
+                commands.append((127 if contact else 25, [(i, value, 1 if i in (0, 1, 49, 50) else 2)
                                       for i, value in enumerate(params)]
                                  + [(52, 1, 1), (53, 0, 2), (54, anchor, 1)]))
-                emitter_nodes.add((owner, node["offset"]))
+                (collision_emitter_nodes if contact else emitter_nodes).add((owner, node["offset"]))
                 if owner in popping:
                     pop_bursts.add((owner, node["offset"]))
             elif main == 13:
@@ -552,7 +555,7 @@ def pack_object_scripts(ssf, pbd, models, collision, instances, source_to_instan
     # Do not schedule loops consisting only of unimplemented sounds/emitters.
     # Keep every continuation which reaches a supported action, including
     # through other continuations; remove only code with no native consumer.
-    meaningful = {1, 2, 3, 4, 5, 9, 13, 21, 22, 25, 28, 111, 112, 119, 122, 123, 124, 125, 126}
+    meaningful = {1, 2, 3, 4, 5, 9, 13, 21, 22, 25, 28, 111, 112, 119, 122, 123, 124, 125, 126, 127}
 
     def action(call):
         builtin, args = call
@@ -640,9 +643,11 @@ def pack_object_scripts(ssf, pbd, models, collision, instances, source_to_instan
             "source_cracked_configs": [[owner, *config] for owner, config in sorted(cracked_configs.items())],
             "source_pop_burst_nodes": sorted(pop_bursts),
             "source_emitter_nodes": sorted(emitter_nodes),
+            "source_collision_emitter_nodes": sorted(collision_emitter_nodes),
             "source_contact_only_instances": sorted(interactives.contact_only_instances),
             "source_non_bouncing_breakables": sorted(break_through),
             "native_emitter_anchors": [[owner, rid] for owner, rid in interactives.emitter_anchors.items()],
+            "native_collision_emitter_anchors": [[owner, rid] for owner, rid in interactives.collision_emitter_anchors.items()],
             "source_leave_latches": sorted(owner for owner, slot in roots if slot == 3),
             "source_end_latches": sorted(owner for owner, slot in roots if slot == 4),
             "native_deferred_functions": len(live_tasks),
