@@ -321,6 +321,12 @@ original Tricky sky geometry/materials/textures replace the template sky;
 native template ambiance remains in use. Some target-only spline,
 patch and material fields use retail defaults and still need refinement.
 
+The [mechanics audit](tricky-mechanics-audit.md) inventories the missing
+teleport, breakable walls, moving obstacles, rail transitions, scripted resets
+and Showoff time gates, with source instance IDs and effect-chain links.
+`python tools/audit_tricky_mechanics.py` regenerates its ignored JSON inventory
+from the disc and prepared import manifests without running the game.
+
 To add another course, register it in `tools/tricky_courses.py`, regenerate
 the Rust catalog and prepare its separate course/mode archives and UI rows.
 Extend the explicit surface table when a new source type appears. Do not
