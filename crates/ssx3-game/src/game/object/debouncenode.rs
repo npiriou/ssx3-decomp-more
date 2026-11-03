@@ -1070,28 +1070,41 @@ pub fn crowd_man3d_group_init(c: &mut Cpu) {
     })
 }
 
-/// `void Counter_Update(DebounceNode* self)` (0x343820): when the debounce
-/// timer (`+0x1c`) has not started, set it to -1 and tell the node
-/// (`vtable` slot 0x110) that it was updated.
+/// `void Counter_Update(Counter* self)` (0x343820): when its count reaches
+/// zero, set it to -1 and request the node's end script via virtual slot
+/// 0x110. The negative sentinel prevents repeated completion.
 pub fn counter_update(c: &mut Cpu) {
     guest(c, |c| {
-        c.cycles += 6;
-        let frame = Frame::open(c, 0x10);
-        c.g[A2][0] = c.g[A0][0];
-        frame.save_ra(c, 0);
-        c.g[V0][0] = c.lw(r32(c, A2).wrapping_add(0x1c));
-        if c.g[V0][0] == 0 {
-            c.cycles += 9;
-            c.g[V0][0] = u64::MAX;
-            c.g[V1][0] = c.lw(r32(c, A2).wrapping_add(0xc));
-            c.sw(r32(c, A2).wrapping_add(0x1c), u64::MAX);
-            let vt = r32(c, V1);
-            c.g[A1][0] = 1;
-            c.g[A0][0] = c.lh(vt.wrapping_add(0x110));
-            c.g[V0][0] = c.lw(vt.wrapping_add(0x114));
-            let method = r32(c, V0);
-            c.g[A0][0] = sx(r32(c, A2).wrapping_add(r32(c, A0)));
-            call_ptr(c, method, 0x0034_3858)?;
+        let frame = Frame { size: 0x10 };
+        match c.pc {
+            0x0034_3820 => {
+                c.cycles += 6;
+                Frame::open(c, 0x10);
+                c.g[A2][0] = c.g[A0][0];
+                frame.save_ra(c, 0);
+                c.g[V0][0] = c.lw(r32(c, A2).wrapping_add(0x1c));
+                if c.g[V0][0] == 0 {
+                    crate::custom_counter_trace::completed(c, r32(c, A2));
+                    c.cycles += 9;
+                    c.g[V0][0] = u64::MAX;
+                    c.g[V1][0] = c.lw(r32(c, A2).wrapping_add(0xc));
+                    c.sw(r32(c, A2).wrapping_add(0x1c), u64::MAX);
+                    let vt = r32(c, V1);
+                    c.g[A1][0] = 1;
+                    c.g[A0][0] = c.lh(vt.wrapping_add(0x110));
+                    c.g[V0][0] = c.lw(vt.wrapping_add(0x114));
+                    let method = r32(c, V0);
+                    c.g[A0][0] = sx(r32(c, A2).wrapping_add(r32(c, A0)));
+                    call_ptr(c, method, 0x0034_3858)?;
+                }
+            }
+            // The end graph can allocate objects or execute native script
+            // callbacks. Resume its return without opening a second frame.
+            0x0034_3858 => {}
+            pc => {
+                c.jump_out(pc, 0x0034_3820, 0x0034_3868);
+                return Ok(());
+            }
         }
         c.cycles += 2;
         frame.restore_ra(c, 0);
@@ -1201,28 +1214,39 @@ pub fn crowd_man3d_group_load(c: &mut Cpu) {
 /// (0x343768): `WorldObj_ctor(self, a1, 7, a2)`, then the Counter vtable,
 /// the config word from `a3+4`, and a cleared counter at `+0x20`.
 pub fn counter_ctor(c: &mut Cpu) {
-    c.cycles += 21;
-    let frame = Frame::open(c, 0x30);
-    frame.save(c, S1, 0x10);
-    frame.save(c, S0, 0x20);
-    c.g[S1][0] = c.g[A3][0];
-    c.g[S0][0] = c.g[A0][0];
-    c.g[A3][0] = c.g[A2][0];
-    frame.save_ra(c, 0);
-    c.g[A2][0] = 7;
-    if callee::WORLD_OBJ_CTOR.call(c, 0x0034_378c).is_err() {
-        return;
-    }
-    c.g[V1][0] = sx(0x0049_03f0);
-    c.g[V0][0] = c.g[S0][0];
-    frame.restore_ra(c, 0);
-    c.sw(p_2(c, S0, 0xc), c.g[V1][0]);
-    c.g[A0][0] = Addr(p_2(c, S1, 4)).lh(c);
-    c.sw(p_2(c, S0, 0x20), 0);
-    c.sw(p_2(c, S0, 0x1c), c.g[A0][0]);
-    frame.restore(c, S0, 0x20);
-    frame.restore(c, S1, 0x10);
-    frame.close(c);
+    guest(c, |c| {
+        let frame = Frame { size: 0x30 };
+        match c.pc {
+            0x0034_3768 => {
+                c.cycles += 21;
+                Frame::open(c, 0x30);
+                frame.save(c, S1, 0x10);
+                frame.save(c, S0, 0x20);
+                c.g[S1][0] = c.g[A3][0];
+                c.g[S0][0] = c.g[A0][0];
+                c.g[A3][0] = c.g[A2][0];
+                frame.save_ra(c, 0);
+                c.g[A2][0] = 7;
+                callee::WORLD_OBJ_CTOR.call(c, 0x0034_378c)?;
+            }
+            0x0034_378c => {}
+            pc => {
+                c.jump_out(pc, 0x0034_3768, 0x0034_37c0);
+                return Ok(());
+            }
+        }
+        c.g[V1][0] = sx(0x0049_03f0);
+        c.g[V0][0] = c.g[S0][0];
+        frame.restore_ra(c, 0);
+        c.sw(p_2(c, S0, 0xc), c.g[V1][0]);
+        c.g[A0][0] = Addr(p_2(c, S1, 4)).lh(c);
+        c.sw(p_2(c, S0, 0x20), 0);
+        c.sw(p_2(c, S0, 0x1c), c.g[A0][0]);
+        frame.restore(c, S0, 0x20);
+        frame.restore(c, S1, 0x10);
+        frame.close(c);
+        Ok(())
+    });
 }
 
 // ---------------------------------------------------------------------------
@@ -1336,6 +1360,8 @@ pub fn conveyor_update(c: &mut Cpu) {
 pub fn counter_handle_event(c: &mut Cpu) {
     let self_ = abi::arg(c, 0);
     let msg = abi::arg64(c, 1);
+    let observed = crate::custom_counter_trace::before(c, self_);
+    let observed_level = c.f[12];
     // bit = 1 << (level - 1) for the levels 1..10, 0 otherwise, from the
     // equality chain against 1.0f .. 10.0f.
     const LEVELS: [(u32, u64); 8] = [
@@ -1382,8 +1408,8 @@ pub fn counter_handle_event(c: &mut Cpu) {
         }
     }
     c.g[A2][0] = bit; // the latch bit the original keeps in a2
-                      // The message updates the latch (+0x20): 0x1f4 presses, 0x1f5 releases,
-                      // 0x1f6 is the "fire now" message.
+                      // 0x1f4 marks an input once; 0x1f5 also requires its
+                      // predecessor; 0x1f6 decrements without an input bit.
     let mut store: Option<u64> = None;
     let mut fire = 0u64;
     c.cycles += 3;
@@ -1458,6 +1484,7 @@ pub fn counter_handle_event(c: &mut Cpu) {
         }
     }
     c.cycles += 2;
+    crate::custom_counter_trace::event(c, self_, msg, observed_level, observed);
     abi::ret(c);
 }
 

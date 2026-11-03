@@ -44,7 +44,6 @@ que toute collision ou tout rebond natif est absent.
 | --- | --- |
 | Fissuration, résistance et déclenchement des vingt vitres | Tokyo Megaplex |
 | Movers sur spline, notamment train/câbles | Merqury City et Snowdream |
-| Compteurs installés et commandes de comptage | Merqury City et Pipedream |
 | Réactions Roller / objets pouvant être mis en mouvement | Garibaldi, Snowdream, Elysium, Mesa, Merqury, Tokyo, Alaska, tutoriel |
 | Flexion des clôtures | Garibaldi, Snowdream, Merqury, Tokyo |
 | Drapeaux animés par le vent | Snowdream, Elysium, Mesa, Tokyo |
@@ -60,6 +59,12 @@ Les boutons de Tokyo à texture temporaire sont maintenant importés : 75
 receveurs, durées de 0,5 ou 1 seconde. Un contact de 0,5 seconde, son nettoyage et son fonctionnement
 après redémarrage ordinaire ont été observés. Le détail et les limites des
 observations sont dans le plan d'implémentation.
+
+Les compteurs de Merqury et Pipedream utilisent désormais le Counter natif de
+SSX3, avec leurs scripts de fin. À Merqury, un contact réel et la déduplication
+des contacts répétés sont observés. Le déclenchement après les dix poubelles,
+les 24 cibles de Pipedream et leurs effets de fin restent à observer ; la
+physique des poubelles et les particules sont encore incomplètes.
 
 ### Inventaire de départ
 

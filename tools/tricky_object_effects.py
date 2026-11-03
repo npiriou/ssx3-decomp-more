@@ -89,6 +89,7 @@ def pack_object_scripts(ssf, pbd, models, collision, instances, source_to_instan
     scrolls = set()
     flips = set()
     material_lifetimes = set()
+    counters = {}
     receiver_kinds = {}
     tasks = {}
     task_ids = {}
@@ -243,6 +244,17 @@ def pack_object_scripts(ssf, pbd, models, collision, instances, source_to_instan
                 rail, enabled = words
                 commands.append((119, [(0, (rail << 8) | section, 1), (1, enabled, 1)]))
                 rail_switches.add(rail)
+            elif main == 0 and words[0] == 6:
+                if len(words) != 3 or not 0 <= words[1] <= 32767:
+                    raise FormatError("invalid Tricky counter parameters")
+                # Native Counter owns the count, numbered latches and end
+                # dispatch. Source word two is opaque, not a lifetime. A
+                # zero source count must not fire on its first native update.
+                rid = instance_rid(owner)
+                commands.append((9, [(0, rid, 1),
+                                     (1, words[1] if words[1] else 0xffffffff, 1)]))
+                counters[owner] = (words[1], words[2])
+                receiver_kinds[owner] = 6
             elif main == 0 and words[0] == 5 and words[1] == 4:
                 # Tricky's hard breakable kill is native DeadNode mode zero.
                 # Its constructor clears drawing/collision and the native
@@ -360,7 +372,9 @@ def pack_object_scripts(ssf, pbd, models, collision, instances, source_to_instan
                 message = (0x8c if command == 2 and kind == 257 else
                            0x82 if command == 3 and kind == 258 else None)
                 receiver = receiver_kinds.get(owner)
-                if receiver == 10 and 1 <= command <= 6:
+                if receiver == 6 and 1 <= command <= 3:
+                    message = 499 + command  # native mark / ordered mark / decrement
+                elif receiver == 10 and 1 <= command <= 6:
                     message = (201, 200, 202, 203, 204, 205)[command - 1]
                 elif receiver == 11 and 1 <= command <= 3:
                     message = 299 + command
@@ -374,7 +388,7 @@ def pack_object_scripts(ssf, pbd, models, collision, instances, source_to_instan
 
     # Establish native receiver types before translating contact commands that
     # address another instance (the Elysium kicker trigger uses three targets).
-    for source_channel, native_slot in ((0, 1), (1, 2)):
+    for source_channel, native_slot in ((0, 1), (1, 2), (3, 3), (4, 4)):
         for owner in instances:
             if owner in interactives.replacements:
                 continue
@@ -391,7 +405,7 @@ def pack_object_scripts(ssf, pbd, models, collision, instances, source_to_instan
     # Do not schedule loops consisting only of unimplemented sounds/emitters.
     # Keep every continuation which reaches a supported action, including
     # through other continuations; remove only code with no native consumer.
-    meaningful = {2, 3, 4, 5, 13, 21, 22, 28, 111, 112, 119}
+    meaningful = {2, 3, 4, 5, 9, 13, 21, 22, 28, 111, 112, 119}
 
     def action(call):
         builtin, args = call
@@ -414,17 +428,27 @@ def pack_object_scripts(ssf, pbd, models, collision, instances, source_to_instan
     for rid, calls in tasks.items():
         interactives.define_function(rid, calls_blob(supported(calls)))
     roots = {key: supported(calls) for key, calls in roots.items()}
+    # A populated leave/end slot, even an empty source graph, suppresses
+    # native default teardown. Preserve that latch independently of whether
+    # all its visual consumers are available yet (e.g. Pipedream fireworks).
     roots = {key: calls for key, calls in roots.items()
-             if any(action(call) or call[0] == 115 for call in calls)}
+             if key[1] in (3, 4) or any(action(call) or call[0] == 115 for call in calls)}
     for (owner, native_slot), calls in roots.items():
+        if native_slot in (3, 4):
+            # Node-owned lifecycle callbacks have no contacting rider. The
+            # retail script manager otherwise retains its default rider0.
+            # Keep the restore after every graph-end label, and the busy
+            # guard outside this scope so its early return cannot leak it.
+            calls.insert(0, (117, [(0, instance_rid(owner), 1)]))
+            calls.append((118, []))
         if any(builtin == 115 for builtin, _ in calls):
             calls.insert(0, (116, [(0, instance_rid(owner), 1), (1, native_slot, 1)]))
     owners = sorted({owner for owner, _ in roots})
     for owner in owners:
         binding = [0xffffffff] * 6
-        for native_slot in (1, 2):
+        for native_slot in (1, 2, 3, 4):
             calls = roots.get((owner, native_slot))
-            if calls:
+            if calls is not None:
                 binding[native_slot] = interactives.add_function(calls_blob(calls))
         binding = tuple(binding)
         if binding not in interactives.bindings:
@@ -445,6 +469,9 @@ def pack_object_scripts(ssf, pbd, models, collision, instances, source_to_instan
             "source_uv_scroll_instances": sorted(scrolls),
             "source_texture_flip_instances": sorted(flips),
             "source_finite_material_properties": sorted(material_lifetimes),
+            "source_counter_configs": [[owner, *config] for owner, config in sorted(counters.items())],
+            "source_leave_latches": sorted(owner for owner, slot in roots if slot == 3),
+            "source_end_latches": sorted(owner for owner, slot in roots if slot == 4),
             "native_deferred_functions": len(live_tasks),
             "source_wait_nodes": sorted(waits),
             "source_invisible_tombstones": sorted(invisible_tombstones),
