@@ -123,6 +123,7 @@ def pack_object_scripts(ssf, pbd, models, collision, instances, source_to_instan
     slots, chains, functions = read_logic(ssf)
     selected = set(instances)
     records = {}
+    static_animation_nodes = set()
     roots = {}
     animation_kinds = {}
     resets = set()
@@ -562,9 +563,8 @@ def pack_object_scripts(ssf, pbd, models, collision, instances, source_to_instan
                 receiver_kinds[owner] = 11
             elif main == 0 and words[0] in (256, 257, 258):
                 model = models[pbd["instances"][owner]["model_id"]]
-                if not any(part["animation"] and part["animation"]["channels"]
-                           for part in model["objects"]):
-                    continue
+                has_curves = any(part["animation"] and part["animation"]["channels"]
+                                 for part in model["objects"])
                 kind = words[0]
                 if len(words) != (13 if kind == 258 else 9):
                     raise FormatError("unexpected Tricky animation parameter count")
@@ -592,6 +592,12 @@ def pack_object_scripts(ssf, pbd, models, collision, instances, source_to_instan
                 commands.append((kind - 253, arguments))  # native builtin IDs 3/4/5
                 animation_kinds[owner] = kind
                 records[owner, node["offset"]] = kind
+                if not has_curves:
+                    # Source198810 still constructs/promotes the actor when
+                    # its animated-part count is zero. Native AnimObject also
+                    # supports null node-info and unanimated bone matrices;
+                    # StepLoop wraps once, with no division by clip duration.
+                    static_animation_nodes.add((owner, node["offset"]))
             elif main in (3, 9):
                 command, value = words
                 kind = animation_kinds.get(owner)
@@ -713,6 +719,7 @@ def pack_object_scripts(ssf, pbd, models, collision, instances, source_to_instan
     return {"native_object_animations": sum(kind == 256 for kind in records.values()),
             "native_delta_animations": sum(kind == 257 for kind in records.values()),
             "native_combo_animations": sum(kind == 258 for kind in records.values()),
+            "source_static_animation_nodes": sorted(static_animation_nodes),
             "native_scripted_resets": len(resets),
             "source_reset_instances": sorted(resets),
             "native_mesh_break_animations": len(fragments),

@@ -72,6 +72,10 @@ def audit(course, iso: Path, overlay: Path) -> dict:
                        for mode, report in native.items()}
     boost_ids = {mode: set(report["source_boost_instances"]) for mode, report in native.items()}
     animated_ids = {mode: set(report.get("source_animated_instances", [])) for mode, report in native.items()}
+    static_animation_nodes = {
+        mode: {tuple(row) for row in report.get("source_static_animation_nodes", [])}
+        for mode, report in native.items()
+    }
     reset_ids = {mode: set(report.get("source_reset_instances", [])) for mode, report in native.items()}
     fragment_ids = {mode: set(report.get("source_mesh_anim_instances", [])) for mode, report in native.items()}
     hidden_ids = {mode: set(report.get("source_hard_hide_instances", [])) for mode, report in native.items()}
@@ -144,7 +148,9 @@ def audit(course, iso: Path, overlay: Path) -> dict:
                     elif kind == "scripted_reset" and target in reset_ids.get(mode, set()):
                         status = "native_contact_script"
                     elif kind in ("object_animation", "delta_animation", "combo_animation") and target in animated_ids.get(mode, set()):
-                        status = "native_curve_script"
+                        status = ("native_static_animation_actor"
+                                  if (target, node["offset"]) in static_animation_nodes.get(mode, set())
+                                  else "native_curve_script")
                     elif kind == "mesh_break_animation" and target in fragment_ids.get(mode, set()):
                         status = "native_fragment_script"
                     elif kind == "breakable_hide" and target in hidden_ids.get(mode, set()):
