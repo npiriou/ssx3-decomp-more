@@ -179,11 +179,14 @@ def audit(course, iso: Path, overlay: Path) -> dict:
             groups.append([])
         groups[-1].append(gate)
     counts = Counter((entry["mode"], entry["mechanic"], entry["status"]) for entry in entries.values())
+    prepared_showoff = native.get("freestyle", {})
+    gate_import = ("native_SOP_events" if prepared_showoff.get("source_paths") == "SOP"
+                   and prepared_showoff.get("showoff_hundredths") is not None else "not implemented")
     return {"code": course.code, "name": course.name,
             "race_pass_events": [event for path in source_paths["race_paths"]
                                  for event in path["events"] if event["type"] == 12],
             "showoff_time_gate_groups": groups,
-            "showoff_gate_import": "not implemented" if groups and "freestyle" in course.modes else "not applicable",
+            "showoff_gate_import": gate_import if groups and "freestyle" in course.modes else "not applicable",
             "summary": [{"mode": mode, "mechanic": kind, "status": status, "nodes": count}
                         for (mode, kind, status), count in sorted(counts.items())],
             "instances": list(entries.values())}

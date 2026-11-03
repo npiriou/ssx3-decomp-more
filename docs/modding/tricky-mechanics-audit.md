@@ -6,6 +6,12 @@ partie, aucun test automatisé et aucun replay pour cet audit.
 
 ## Conclusion
 
+Suivi : le [plan d'implémentation](../plans/tricky-mechanics-implementation.md)
+consigne les corrections postérieures à cet état de référence. Le Freestyle
+solo, les temps initiaux extraits de l'exécutable et les événements de temps
+SOP sont maintenant implémentés ; les autres lignes ci-dessous restent
+l'inventaire de départ à reprendre.
+
 Oui, plusieurs mécaniques restent absentes. Les plus importantes pour le
 parcours sont les murs destructibles de Pipedream, le téléporteur de Merqury,
 les objets mobiles qui modifient les passages et les portes de temps Freestyle.

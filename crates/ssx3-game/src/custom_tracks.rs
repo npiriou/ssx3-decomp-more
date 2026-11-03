@@ -204,6 +204,22 @@ pub fn assets_available() -> bool {
     ASSETS_AVAILABLE.load(Ordering::Acquire)
 }
 
+/// Finalize the working native race settings before BEInterface commits them.
+/// Tricky Showoff uses Slopestyle scoring with one human and no rival/extra
+/// riders. Apply this at the commit boundary after all native setup setters.
+pub fn configure_native_run(c: &mut Cpu) {
+    if !active().is_some_and(|track| track.event == EventKind::Freestyle) {
+        return;
+    }
+    const SETTINGS: u32 = 0x0053_5bc8;
+    if c.bus.read8(SETTINGS + 0x48) != 1 { return; }
+    c.bus.write32(SETTINGS + 0x30, 1); // total
+    c.bus.write32(SETTINGS + 0x34, 1); // humans
+    c.bus.write32(SETTINGS + 0x38, 0); // extra mission riders
+    c.bus.write32(SETTINGS + 0x3c, 0); // AI riders
+    eprintln!("[tricky] commit Showoff: one human, zero AI/extra riders");
+}
+
 pub fn set_world_texture_slots(slots: u32) {
     WORLD_TEXTURE_SLOTS.store(slots.max(1500), Ordering::Release);
 }

@@ -1,11 +1,12 @@
 //! Authored Tricky velocity volumes and rider-local circuit pass countdown.
 //!
-//! TFX1 files are derived from the source SSF/AIP, alongside each BAM. They
+//! TFX2 files are derived from SSF/AIP/SOP and the executable clock catalogue,
+//! alongside each BAM (legacy TFX1 is readable too). They
 //! contain no renderer settings. Native SSX 3 still owns rider physics,
 //! contacts, pickup scripts, finish handling and the race clock.
 
 use ssx3_ee_rt::Cpu;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::{LazyLock, Mutex};
 
@@ -29,6 +30,7 @@ struct Rider {
     previous: Option<[f32; 3]>,
     stage: usize,
     contacts: Vec<Contact>,
+    time_gates: HashSet<u32>,
 }
 #[derive(Default)]
 struct Rules {
@@ -38,6 +40,8 @@ struct Rules {
     passes: u32,
     volumes: Vec<Volume>,
     riders: HashMap<u32, Rider>,
+    showoff_hundredths: Option<u32>,
+    timer_seeded: bool,
 }
 pub struct BoostUpdate {
     pub take_off: bool,
@@ -57,7 +61,9 @@ pub fn set_root(root: Option<PathBuf>) {
     };
 }
 pub fn restart() {
-    RULES.lock().unwrap().riders.clear();
+    let mut rules = RULES.lock().unwrap();
+    rules.riders.clear();
+    rules.timer_seeded = false;
 }
 
 /// Distance queries used by standings and AI must include later circuits.
@@ -102,6 +108,8 @@ fn load(rules: &mut Rules) -> bool {
     rules.riders.clear();
     rules.volumes.clear();
     rules.passes = 1;
+    rules.showoff_hundredths = None;
+    rules.timer_seeded = false;
     let Some(root) = &rules.root else {
         return false;
     };
@@ -117,16 +125,20 @@ fn load(rules: &mut Rules) -> bool {
     let Ok(data) = std::fs::read(&path) else {
         return false;
     };
-    if data.len() < 16 || &data[..4] != b"TFX1" {
+    if data.len() < 16 || !matches!(&data[..4], b"TFX1" | b"TFX2") {
+        return false;
+    }
+    let header = if &data[..4] == b"TFX2" { 24 } else { 16 };
+    if data.len() < header {
         return false;
     }
     let passes = word(&data, 4);
     let count = word(&data, 8) as usize;
-    if !(1..=16).contains(&passes) || count > 4096 || data.len() != 16 + count * 144 {
+    if !(1..=16).contains(&passes) || count > 4096 || data.len() != header + count * 144 {
         return false;
     }
     let mut volumes = Vec::with_capacity(count);
-    for record in data[16..].chunks_exact(144) {
+    for record in data[header..].chunks_exact(144) {
         let mut f = [0.; 32];
         for (i, value) in f.iter_mut().enumerate() {
             *value = f32::from_bits(word(record, 16 + i * 4));
@@ -149,6 +161,13 @@ fn load(rules: &mut Rules) -> bool {
         0
     };
     rules.volumes = volumes;
+    if header == 24 && track.event == crate::custom_tracks::EventKind::Freestyle {
+        let hundredths = word(&data, 12);
+        if hundredths > 30000 {
+            return false;
+        }
+        rules.showoff_hundredths = Some(hundredths);
+    }
     // A lap mouth must make its entry decision before overlapping lift nodes.
     rules.volumes.sort_by_key(|v| match v.kind {
         15 => 0,
@@ -171,6 +190,48 @@ fn put(c: &mut Cpu, at: u32, value: f32) {
 }
 fn vec(c: &mut Cpu, at: u32) -> [f32; 3] {
     [float(c, at), float(c, at + 4), float(c, at + 8)]
+}
+
+/// The native event entity holds an absolute deadline in game ticks at +0x78;
+/// +0x88 enables expiry. The AI's +0x0c remains the unmodified elapsed clock.
+fn event_entity(c: &mut Cpu) -> Option<(u32, u32)> {
+    let app = c.bus.read32(0x004a_28a8);
+    if app == 0 {
+        return None;
+    }
+    let module = c.bus.read32(app + 0x84);
+    let entity = c.bus.read32(app + 0xc0);
+    if module == 0 || entity == 0 {
+        return None;
+    }
+    let ai = c.bus.read32(module + 0xc);
+    if ai == 0 {
+        return None;
+    }
+    Some((entity, ai))
+}
+
+fn seed_timer(c: &mut Cpu, rules: &mut Rules) {
+    if rules.timer_seeded {
+        return;
+    }
+    let Some(hundredths) = rules.showoff_hundredths else {
+        return;
+    };
+    let Some((entity, ai)) = event_entity(c) else {
+        return;
+    };
+    if !matches!(c.bus.read32(ai), 4 | 5) {
+        return;
+    }
+    let ticks = (u64::from(hundredths) * u64::from(crate::tick::rate(c)) / 100) as u32;
+    c.bus.write32(entity + 0x78, ticks);
+    c.bus.write32(entity + 0x88, u32::from(hundredths != 0));
+    rules.timer_seeded = true;
+    eprintln!(
+        "[tricky] native Showoff clock: {} hundredths, {} ticks",
+        hundredths, ticks
+    );
 }
 
 fn crosses_box(a: [f32; 3], b: [f32; 3], lo: &[f32], hi: &[f32]) -> bool {
@@ -229,7 +290,11 @@ pub fn update(c: &mut Cpu, address: u32) -> Option<BoostUpdate> {
         return None;
     }
     let mut rules = RULES.lock().unwrap();
-    if !load(&mut rules) || rules.volumes.is_empty() {
+    if !load(&mut rules) {
+        return None;
+    }
+    seed_timer(c, &mut rules);
+    if rules.volumes.is_empty() {
         return None;
     }
     let passes = rules.passes;
@@ -244,6 +309,7 @@ pub fn update(c: &mut Cpu, address: u32) -> Option<BoostUpdate> {
         previous: None,
         stage: 0,
         contacts: (0..volumes.len()).map(|_| Contact::default()).collect(),
+        time_gates: HashSet::new(),
     });
     let position = vec(c, address + 0x110);
     let previous = rider.previous.unwrap_or(position);
@@ -301,6 +367,7 @@ pub fn update(c: &mut Cpu, address: u32) -> Option<BoostUpdate> {
                     rider.previous = Some([position[0], position[1], f[19]]);
                     changed = true;
                     rider.lap_ready = true;
+                    rider.time_gates.clear();
                     contact.retired = true;
                     let first_path = c.bus.read32(0x004d_33b4);
                     if circuit && first_path != 0 {
@@ -361,7 +428,7 @@ pub fn path_event(
         return false;
     }
     let mut rules = RULES.lock().unwrap();
-    if !load(&mut rules) || rules.passes <= 1 {
+    if !load(&mut rules) {
         return false;
     }
     let passes = rules.passes;
@@ -374,7 +441,29 @@ pub fn path_event(
         previous: None,
         stage: 0,
         contacts: (0..count).map(|_| Contact::default()).collect(),
+        time_gates: HashSet::new(),
     });
+    if passes == 0 && kind == 5 {
+        if entering && c.bus.read32(rider_address + 0x874) != 0 {
+            let award = c.bus.read32(event + 4);
+            let group = award & 0xffff;
+            let seconds = award >> 16;
+            if seconds != 0 && seconds <= 600 && rider.time_gates.insert(group) {
+                if let Some((entity, _)) = event_entity(c) {
+                    if c.bus.read32(entity + 0x88) != 0 {
+                        let ticks = seconds.saturating_mul(crate::tick::rate(c));
+                        let limit = c.bus.read32(entity + 0x78);
+                        c.bus.write32(entity + 0x78, limit.saturating_add(ticks));
+                        eprintln!("[tricky] SOP checkpoint {group}: +{seconds}s (rider {rider_address:#x})");
+                    }
+                }
+            }
+        }
+        return true;
+    }
+    if passes <= 1 {
+        return false;
+    }
     if kind == 5 && entering && !lap_volume {
         count_pass(rider, rider_address, crate::tick::vsync_count(c), 180);
     } else if kind == 5 && !active && !lap_volume {

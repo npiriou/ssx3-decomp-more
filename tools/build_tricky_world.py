@@ -35,6 +35,7 @@ from tricky_ssh import inspect_world_ssh, parse_shps, to_world_ssh
 from tricky_courses import Course, course
 from ssx3_tricky_sky import import_sky
 from tricky_gameplay import pack_gameplay
+from tricky_race_settings import showoff_catalog
 
 
 def _verify_disc(iso: Path, serial: bytes, label: str) -> None:
@@ -89,8 +90,21 @@ def build(SSX3_iso: Path, tricky_iso: Path, output: Path, *,
     race_instances = sorted({index for node in spatial["nodes"]
                              for index in node[instance_list]})
     aip_source = read_cofb_member(tricky_archive, f"data/models/{stem}.aip")
+    timing = showoff_catalog(tricky_iso)[selected.code]
     gameplay, gameplay_summary = pack_gameplay(
-        ssf_data, pbd, collision_data, race_instances, aip_source)
+        ssf_data, pbd, collision_data, race_instances, aip_source,
+        showoff_hundredths=timing["showoff_hundredths"], freestyle=mode == "freestyle")
+    path_source = aip_source
+    main_route = selected.main_route
+    if mode == "freestyle":
+        path_source = read_cofb_member(tricky_archive, f"data/models/{stem}.sop")
+        from tricky_assets import parse_aip
+        source_paths = parse_aip(path_source, True)["race_paths"]
+        finishes = [i for i, path in enumerate(source_paths)
+                    if any(event["type"] == 9 for event in path["events"])]
+        if len(finishes) != 1:
+            raise FormatError("SOP requires a unique main-route finish")
+        main_route = tuple(range(finishes[0] + 1))
     # These SSF volumes are physics-only. Their debug meshes must not turn
     # into visible scenery; the native rider adapter owns their triggers.
     boost_instances = set(gameplay_summary["source_boost_instances"])
@@ -123,7 +137,8 @@ def build(SSX3_iso: Path, tricky_iso: Path, output: Path, *,
     source_textures.update(material["texture_id"] for material in materials
                            if material["texture_id"] >= 0)
     source_lightmaps = {patch["lightmap_id"] for patch in pbd["patches"]}
-    aip, starter_paths = convert_tricky_aip(aip_source, main_route=selected.main_route)
+    aip, starter_paths = convert_tricky_aip(path_source, main_route=main_route,
+                                           freestyle=mode == "freestyle")
     textures = [(rid, body) for rid, body in parse_shps(
         read_cofb_member(tricky_archive, f"data/models/{stem}.ssh")) if rid in source_textures]
     lightmaps = [(rid, body) for rid, body in parse_shps(
@@ -280,6 +295,8 @@ def build(SSX3_iso: Path, tricky_iso: Path, output: Path, *,
         "course_id": selected.id, "course_name": selected.name,
         "mode": mode, "source_archive": selected.archive,
         **gameplay_summary,
+        "source_paths": "SOP" if mode == "freestyle" else "AIP",
+        "source_timing": timing,
         "sky": sky_summary,
         "output": str(output), "archive_bytes": len(archive),
         "location_index": section_id, "leaf_stream": leaf_id,

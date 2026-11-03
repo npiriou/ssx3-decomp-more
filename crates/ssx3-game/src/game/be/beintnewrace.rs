@@ -1273,6 +1273,7 @@ pub fn be_new_race_int_get_special_event_value(c: &mut Cpu) {
 /// `void BENewRaceInt_Commit(void)` (0x00144928): copy the working race
 /// settings (0x535bc8) over the live copy (0x5305b0).
 pub fn be_new_race_int_commit(c: &mut Cpu) {
+    crate::custom_tracks::configure_native_run(c);
     copy_race_settings(c, 0x0053_5bc8, 0x0053_05b0, 0x0014_4948, 0x0014_499c);
 }
 

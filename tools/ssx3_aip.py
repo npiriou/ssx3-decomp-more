@@ -109,7 +109,7 @@ def _events(record: bytes, kind: str) -> list[tuple]:
 
 
 def _native_path_records(ai: list[bytes], race: list[bytes],
-                         main_route: tuple[int, ...]) -> tuple[bytes, bytes]:
+                         main_route: tuple[int, ...], freestyle: bool = False) -> tuple[bytes, bytes]:
     # SSX 3 maps stored event keys through Path_ReadEvent's native table.
     # In particular key 0 finishes a race and key 18 marks a checkpoint.
     # Tricky key 9 is its finish, and key 11 awards time at its gates.
@@ -136,8 +136,16 @@ def _native_path_records(ai: list[bytes], race: list[bytes],
                 if key == 11 and checkpoints:
                     checkpoint = min(range(len(checkpoints)),
                                      key=lambda item: abs(checkpoints[item] - (remaining - start)))
-                    native.append((18, checkpoint, start, end))
-                elif key == 12:
+                    if freestyle:
+                        # Stored 12 is inert in SSX 3 (runtime event 5). The
+                        # custom rider consumes the encoded SOP group/seconds;
+                        # these are not indices into Snow Jam's camera table.
+                        if value > 600:
+                            raise FormatError("SOP checkpoint award exceeds 600 seconds")
+                        native.append((12, (value << 16) | checkpoint, start, end))
+                    else:
+                        native.append((18, checkpoint, start, end))
+                elif key == 12 and not freestyle:
                     # The native rider adapter consumes the original pass
                     # countdown; key 12 is otherwise inert in SSX 3.
                     native.append((12, value, start, end))
@@ -214,7 +222,8 @@ def _native_markers(ai: list[dict], race: list[dict], starts: list[int],
 
 
 def convert_tricky_aip(data: bytes, *,
-                       main_route: tuple[int, ...] | None = None) -> tuple[bytes, list[int]]:
+                       main_route: tuple[int, ...] | None = None,
+                       freestyle: bool = False) -> tuple[bytes, list[int]]:
     """Preserve Tricky's routes and return its separate starter path indices."""
     if len(data) < 48 or data[:4] != b"\x0a" * 4:
         raise FormatError("unsupported Tricky AIP header")
@@ -262,7 +271,7 @@ def convert_tricky_aip(data: bytes, *,
                _native_markers(ai_geometry, race_geometry, starts, main_route))
     ai_body, race_body = ((data[ai_begin:ai_end], data[race_begin:race_end])
                           if main_route is None else
-                          _native_path_records(ai_records, race_records, main_route))
+                          _native_path_records(ai_records, race_records, main_route, freestyle))
     target = (b"iiii" + struct.pack("<I", ai_count) + ai_body +
               struct.pack("<I", race_count) + race_body +
               markers)

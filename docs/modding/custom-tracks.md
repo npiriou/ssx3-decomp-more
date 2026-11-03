@@ -23,6 +23,14 @@ Select a character, then **Single Event -> Peak Tricky -> Race or Freestyle**.
 The course list uses the original Tricky names. `prepare_bonus_tracks.py`
 remains a compatibility entry point for the same preparer.
 
+Custom Freestyle uses native Slopestyle scoring with one human and no AI
+rider. Its paths come from the source SOP, including route-specific time
+awards. Initial durations are extracted from the USA Tricky executable's
+course catalogue: Garibaldi 120 seconds, Alaska 135, the other regular
+Showoff slots 90, and the tutorial untimed. Checkpoints increase the native
+deadline without changing elapsed race time. The Tokyo tube rearms their
+logical groups for the next circuit. Original SSX 3 event setup is unchanged.
+
 The preparer accepts `--ssx3-iso`, `--tricky-iso`, `--overlay`, `--course`
 (repeatable), `--force`, `--worlds-only` and `--ui-only`. It derives one native
 BAM per course/mode in `DATA/WORLDS/TRICKY`, frontend lists/locales, the original
@@ -231,7 +239,7 @@ Garibaldi's three main-course gates become checkpoint indices 0, 1 and 2.
 Only supported SSX 3 AI event keys are retained. SSX 3's AI code consumes the
 converted routes; the Tricky AI is not imported.
 
-`tools/tricky_gameplay.py` reads the source SSF effect chains into a `TFX1`
+`tools/tricky_gameplay.py` reads the source SSF effect chains into a `TFX2`
 sidecar (`CODE-mode.FX`) alongside each derived archive. The runtime applies
 the authored directional pushes, vertical lifts, lap mouth and tube-end
 launch volumes to native riders, including AI. Invisible boost trigger

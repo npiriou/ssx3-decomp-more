@@ -15,7 +15,8 @@ RECORD = struct.Struct("<4I32f")
 BOOST_TYPES = (7, 15, 18, 24)
 
 
-def pack_gameplay(ssf, pbd, collision, instances, aip):
+def pack_gameplay(ssf, pbd, collision, instances, aip, *, showoff_hundredths=0,
+                  freestyle=False):
     source = parse_aip(aip, True)
     passes = {event["value"] for path in source["race_paths"]
               for event in path["events"] if event["type"] == 12}
@@ -73,6 +74,8 @@ def pack_gameplay(ssf, pbd, collision, instances, aip):
                 records.append(RECORD.pack(index, subtype, mode, 0, *values))
                 sources.add(index)
             pos += size
-    return (struct.pack("<4s3I", b"TFX1", pass_count, len(records), 0) + b"".join(records),
+    return (struct.pack("<4s5I", b"TFX2", pass_count, len(records),
+                        showoff_hundredths, int(freestyle), 0) + b"".join(records),
             {"lap_passes": pass_count, "native_boost_volumes": len(records),
+             "showoff_hundredths": showoff_hundredths if freestyle else None,
              "source_boost_instances": sorted(sources)})
