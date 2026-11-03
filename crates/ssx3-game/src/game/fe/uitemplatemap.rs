@@ -1371,7 +1371,18 @@ fn es_highlight(c: &mut Cpu, this: u32, w: u32) -> Next {
                     crate::custom_tracks::preview_track(track);
                 }
             } else { crate::custom_tracks::preview_logo(); }
-        } else if mode == 0 { crate::custom_tracks::clear_preview(); }
+        } else if mode == 0 && crate::custom_tracks::menu_preview().is_some() {
+            crate::custom_tracks::clear_preview();
+            // Retail peak hovers share the mountain picture and only change
+            // its highlight. After a custom picture, request that shared
+            // image again through the native async slot before highlighting.
+            let registers = c.g;
+            let floats = c.f;
+            c.g[A0][0] = sx(this);
+            action::LOAD_MAP_IMAGE.call(c, 0x0020_2510)?;
+            c.g = registers;
+            c.f = floats;
+        }
     }
     if es_custom_row(c, w) {
         c.g[A0][0] = sx(this);
