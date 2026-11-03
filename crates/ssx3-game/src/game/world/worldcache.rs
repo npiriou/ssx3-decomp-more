@@ -608,11 +608,24 @@ pub fn world_block_pool_alloc_block(c: &mut Cpu) {
     let pool = abi::arg(c, 0);
     let block = c.bus.read32(pool + 0x10);
     if lazy_geometry_pool(c, pool) && c.bus.read32(block) == 0 {
+        // SectionAllocator keeps its request in S1 at both block-claim
+        // sites. Retail assumes every single resource fits the pool size;
+        // an imported WorldScript can exceed it without being splittable.
+        // Give that descriptor a large enough backing allocation and let
+        // the native section allocator retain/free it normally.
+        let bytes = if matches!(r32(c, RA), 0x003a_78a8 | 0x003a_79d0) {
+            // Its first-block fit check is strict (<), so keep at least
+            // one byte spare, rounded to the native sixteen-byte alignment.
+            c.bus.read32(pool).max(r32(c, S1).saturating_add(16) & !15)
+        } else {
+            c.bus.read32(pool)
+        };
         guest(c, |c| {
             save_lazy_block_frame(c);
             c.g[S0][0] = c.g[A0][0];
             c.g[S1][0] = c.lw(r32(c, S0) + 0x10);
-            c.g[A0][0] = c.lw(r32(c, S0));
+            c.g[S2][0] = sx(bytes);
+            c.g[A0][0] = sx(bytes);
             c.g[A1][0] = 0x0049_4dd8;
             c.g[A2][0] = 0x2500_0000;
             c.g[A3][0] = 0;
@@ -627,6 +640,7 @@ pub fn world_block_pool_alloc_block(c: &mut Cpu) {
 
 fn finish_lazy_block_alloc(c: &mut Cpu) {
     c.sw(r32(c, S1), c.g[V0][0]);
+    c.sw(r32(c, S1) + 4, c.g[S2][0]);
     restore_lazy_block_frame(c);
     pop_world_block(c);
 }
@@ -711,6 +725,10 @@ pub fn world_block_pool_free_block(c: &mut Cpu) {
 fn finish_lazy_block_free(c: &mut Cpu) {
     c.sw(r32(c, S1), 0);
     restore_lazy_block_frame(c);
+    // A later ordinary allocation must not inherit a released oversized
+    // block's capacity while receiving only the usual 128 KiB payload.
+    let bytes = c.bus.read32(abi::arg(c, 0));
+    c.sw(abi::arg(c, 1) + 4, bytes as u64);
     push_world_block(c);
 }
 

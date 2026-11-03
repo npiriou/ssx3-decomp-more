@@ -96,6 +96,7 @@ class NativeInteractives:
         self.replacements = {}
         self.posts = []
         self.bindings = []
+        self.object_bindings = {}
         self.functions = []
         self.function_ids = {}
         self.properties = {}
@@ -251,6 +252,14 @@ class NativeInteractives:
                 self.bindings.append(mapped)
             struct.pack_into("<I", out, 8, (self.bindings.index(mapped) << 8) | self.section)
         return bytes(out)
+
+    def add_function(self, code):
+        """Intern newly compiled native Luno functions alongside retail ones."""
+        key = ("compiled", code)
+        if key not in self.function_ids:
+            self.function_ids[key] = len(self.functions)
+            self.functions.append(code)
+        return (self.function_ids[key] << 8) | self.section
 
     def records(self):
         """Native model/material payloads; texture IDs remain global retail IDs."""

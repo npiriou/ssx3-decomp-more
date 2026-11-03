@@ -1,4 +1,4 @@
-"""Build native world property tables without importing Tricky scripts."""
+"""Build native world properties and Luno bindings for imported Tricky objects."""
 
 from __future__ import annotations
 
@@ -40,7 +40,9 @@ def pack_world_script(pbd: dict, models: list[dict], source: dict,
             index = prop["physics_index"]
             collider = ((physics_base + index) << 8) | section_id
             parts = max(parts, len(source["physics"][index]["bodies"]))
-        key = (source_index, parts)
+        binding = (interactives.object_bindings.get(instance_id, 0xffffffff)
+                   if interactives else 0xffffffff)
+        key = (source_index, parts, binding)
         if key not in unique:
             unique[key] = len(offsets)
             offsets.append(len(properties))
@@ -49,7 +51,7 @@ def pack_world_script(pbd: dict, models: list[dict], source: dict,
             flags = prop["flags"] & 0x21
             if mode in (1, 3) and collider == 0xffffffff:
                 flags &= ~0x20
-            properties.extend(struct.pack("<4I", mode, flags << 16, 0xffffffff, collider))
+            properties.extend(struct.pack("<4I", mode, flags << 16, binding, collider))
             # Native per-part data: mass, restitution, contact flags and
             # signed surface. Bit 0 bounces; bit 1 records wall contacts.
             contact_flags = 2 | (1 if prop["flags"] & 0x80 else 0)
@@ -70,7 +72,8 @@ def pack_world_script(pbd: dict, models: list[dict], source: dict,
     out = bytearray(92)
     struct.pack_into("<3I", out, 0, 0x1000, 0x3800, 0)
     out[12:16] = version
-    # No Tricky scripts or native career/event missions are imported.
+    # Source object effects are compiled to native Luno callbacks. Raw Tricky
+    # scripts and unrelated native career/event missions are not copied.
     for count, pointer in ((0x10, 0x14), (0x18, 0x1c), (0x20, 0x24),
                             (0x28, 0x2c), (0x30, 0x34), (0x38, 0x3c)):
         struct.pack_into("<II", out, count, 0, 92)

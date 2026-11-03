@@ -72,6 +72,9 @@ descriptors and 128 KiB block size but allocates each payload on first use.
 Releasing a section returns its payloads to the named heap. This prevents
 unused geometry reservations from exhausting shared-texture memory: Alaska
 uses 27 blocks while its full-resolution leaf textures need about 4 MiB.
+A resource larger than 128 KiB receives sufficient backing capacity for its
+request, including the native strict-fit/alignment slack. Recycling restores
+the ordinary capacity so later small allocations cannot inherit stale limits.
 The retail allocator's packing, resource sizes and texture pixels are unchanged.
 
 The native UI additions live in the derived FE.LUI and locale file:
@@ -322,9 +325,18 @@ A windowed Tokyo Race session counted 3, 2, 1 and 0 at successive tube
 entries. A competitor completed all three full circuits and reached the
 native finish at 23,748 ticks (6:35.8); earlier entries did not finish it.
 
-Source prefab animations are currently static. Source gameplay processes,
-lights, particles and ambient audio are not executed/imported as Tricky
-systems. Instance lighting is baked; terrain uses source lightmaps. The
+Source prefab cubic tracks are imported into native MDRs; source animation,
+delta/combo control, debounce, unconditional shatter and reset chains compile
+to native Luno object callbacks. Their focus lifecycle and collisions use
+the SSX 3 world objects. Source material frame lists, persistent UV clocks
+and persistent texture flips use native per-instance modifiers. The Luno
+emitter reserves the two implicit call registers and a separate result slot;
+one-register descriptors corrupt the native caller's adjacent allocation.
+Waits/gates, cracked-glass state, rail transitions, spline movers, finite
+material playback, soft-body effects and emitters remain incomplete;
+the [implementation plan](../plans/tricky-mechanics-implementation.md) records
+actual manual observations and remaining work. Source lights/ambient audio
+are not imported as Tricky systems. Instance lighting is baked; terrain uses source lightmaps. The
 original Tricky sky geometry/materials/textures replace the template sky;
 native template ambiance remains in use. Some target-only spline,
 patch and material fields use retail defaults and still need refinement.

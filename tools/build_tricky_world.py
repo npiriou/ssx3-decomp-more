@@ -1,6 +1,6 @@
 """Build one Tricky course/mode in its own native SSX 3 BAM archive.
 
-The derived data includes terrain, static models, textures, splines and
+The derived data includes terrain, animated prefabs, textures, splines and
 native race paths and native object/rail property tables. Surface conversion
 and the surrounding event flow remain in development. The generated BAM
 belongs in .cache/.
@@ -35,6 +35,7 @@ from tricky_ssh import inspect_world_ssh, parse_shps, to_world_ssh
 from tricky_courses import Course, course
 from ssx3_tricky_sky import import_sky
 from tricky_gameplay import pack_gameplay
+from tricky_object_effects import pack_object_scripts
 from tricky_race_settings import showoff_catalog
 
 
@@ -43,7 +44,7 @@ def _verify_disc(iso: Path, serial: bytes, label: str) -> None:
         raise FormatError(f"{iso}: expected {label} ({serial.decode('ascii')})")
 
 
-def _material_payload(source: dict, texture_rid: int) -> bytes:
+def _material_payload(source: dict, texture_rid: int, frames=()) -> bytes:
     # The Tricky 0x20000 and 0x40000 appearance bits correspond to alpha
     # test and alpha blend. SSX 3 WorldMaterial uses bits 2 and 4 in its
     # render flags. This visual mapping still needs an in-game comparison.
@@ -51,8 +52,15 @@ def _material_payload(source: dict, texture_rid: int) -> bytes:
     if flags & ~0x75108:
         raise FormatError(f"unknown Tricky material appearance flags {flags:#x}")
     render_flags = 1 | (2 if flags & 0x20000 else 0) | (4 if flags & 0x40000 else 0)
-    return struct.pack("<10h", texture_rid, -1, -1, 0, 0, 0, 1,
-                       render_flags, -1, -1)
+    # Native material+0x10 is -1 for no flipbook, otherwise the resolver
+    # points it at the inline {count, {u16 texture,u16 opaque} frames[]}.
+    # Native TexFlipModifier makes its own per-instance material records.
+    out = struct.pack("<8hi", frames[0] if frames else texture_rid,
+                      -1, -1, 0, 0, 0, 1, render_flags, 0 if frames else -1)
+    if frames:
+        out += struct.pack("<I", len(frames))
+        out += b"".join(struct.pack("<HH", texture, 0) for texture in frames)
+    return out
 
 
 def build(SSX3_iso: Path, tricky_iso: Path, output: Path, *,
@@ -133,9 +141,16 @@ def build(SSX3_iso: Path, tricky_iso: Path, output: Path, *,
     source_to_instance = {source: rid for rid, source in enumerate(race_instances)}
     interactives.prepare(section_id, leaf_id, len(model_ids), len(material_ids),
                          source_to_instance)
+    object_summary = pack_object_scripts(
+        ssf_data, pbd, models, collision_data, race_instances, source_to_instance,
+        interactives, section_id)
     source_textures = {patch["texture_assignment"] for patch in pbd["patches"]}
     source_textures.update(material["texture_id"] for material in materials
                            if material["texture_id"] >= 0)
+    for material in materials:
+        flip = material["texture_flipbook_id"]
+        if flip >= 0:
+            source_textures.update(pbd["texture_flipbooks"][flip])
     source_lightmaps = {patch["lightmap_id"] for patch in pbd["patches"]}
     aip, starter_paths = convert_tricky_aip(path_source, main_route=main_route,
                                            freestyle=mode == "freestyle")
@@ -166,7 +181,10 @@ def build(SSX3_iso: Path, tricky_iso: Path, output: Path, *,
         shared.extend(pack_resource(
             0, section_id, material_ids[material["index"]],
             _material_payload(material, -1 if material["texture_id"] < 0 else
-                              texture_base + material["texture_id"]),
+                              texture_base + material["texture_id"],
+                              [texture_base + texture for texture in
+                               pbd["texture_flipbooks"][material["texture_flipbook_id"]]]
+                              if material["texture_flipbook_id"] >= 0 else ()),
         ))
     model_layouts = {}
     for model in models:
@@ -295,6 +313,7 @@ def build(SSX3_iso: Path, tricky_iso: Path, output: Path, *,
         "course_id": selected.id, "course_name": selected.name,
         "mode": mode, "source_archive": selected.archive,
         **gameplay_summary,
+        **object_summary,
         "source_paths": "SOP" if mode == "freestyle" else "AIP",
         "source_timing": timing,
         "sky": sky_summary,

@@ -4254,7 +4254,17 @@ pub fn luno_vm_execute(c: &mut Cpu) {
                     let t = c.g[V1][0] as u32;
                     c.g[RA][0] = sx(0x00223fa4);
                     c.g[S1][0] = 0x4;
-                    call_ptr(c, t, 0x00223fa4)?;
+                    let builtin = (r(c, S2) >> 16) & 255;
+                    if let Some(flow) = crate::custom_script_effects::builtin(c, builtin, 0x0022_3fa4) {
+                        flow?;
+                    } else {
+                        call_ptr(c, t, 0x00223fa4)?;
+                    }
+                    pc = 0x00223fa4;
+                    continue;
+                }
+                0x00223fa4 => {
+                    crate::custom_script_effects::after_builtin(c, (r(c, S2) >> 16) & 255);
                     c.g[V0][0] = 0xc;
                     c.g[V1][0] = c.lw(r(c, S5));
                     c.mult(0, 16, 16, 2);

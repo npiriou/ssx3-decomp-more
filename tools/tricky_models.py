@@ -1,4 +1,4 @@
-"""Read Tricky PS2 prefab hierarchies and their quantized static meshes.
+"""Read Tricky PS2 prefab hierarchies, cubic tracks and quantized meshes.
 
 Format reference: SSX-Library BDHandler's PS2 model reader. This module
 decodes source assets; it does not execute source animations or gameplay.
@@ -64,6 +64,39 @@ def _mesh_chunk(data: bytes, start: int, end: int, scale: tuple) -> tuple[dict, 
         base += length
     return {"positions": positions, "normals": normals, "uv": uv,
             "strip_lengths": strip_lengths, "triangles": triangles}, pos
+
+
+def _object_animation(data: bytes, start: int, end: int) -> dict:
+    """Read the six-axis cubic tracks, preserving authored coefficients/time.
+
+    Tricky offsets are relative to the animation descriptor. Native MDR uses
+    the same channel/curve records with offsets relative to its model payload;
+    ssx3_models performs that relocation when writing the target resource.
+    """
+    _extent(data, start, 36, end)
+    base = struct.unpack_from("<6f3I", data, start)
+    mask, count, table = base[6:]
+    if mask & ~0x3f or count != mask.bit_count():
+        raise FormatError("Tricky animation channel mask/count disagree")
+    _extent(data, start + table, count * 4, end)
+    channels = []
+    for index in range(count):
+        relative = struct.unpack_from("<I", data, start + table + index * 4)[0]
+        channel = start + relative
+        _extent(data, channel, 8, end)
+        segments, segment_offset = struct.unpack_from("<2I", data, channel)
+        # The source reader consumes the records following this header.
+        # Preserve and inspect the offset rather than inventing key samples.
+        _extent(data, channel + segment_offset, segments * 24, end)
+        curves = [list(struct.unpack_from("<6f", data, channel + segment_offset + i * 24))
+                  for i in range(segments)]
+        if not all(math.isfinite(value) for curve in curves for value in curve):
+            raise FormatError("Tricky animation contains a non-finite curve")
+        channels.append(curves)
+    if not all(math.isfinite(value) for value in base[:6]):
+        raise FormatError("Tricky animation base transform is not finite")
+    return {"base_position": list(base[:3]), "base_rotation": list(base[3:6]),
+            "mask": mask, "channels": channels}
 
 
 def parse_prefabs(data: bytes, counts: dict, offsets: dict) -> list[dict]:
@@ -136,6 +169,8 @@ def parse_prefabs(data: bytes, counts: dict, offsets: dict) -> list[dict]:
             objects.append({"index": object_index, "parent": parent,
                             "matrix": matrix, "meshes": meshes, "bounds": bounds,
                             "animation_offset": animation,
+                            "animation": (_object_animation(data, entry + animation, model_end)
+                                          if animation not in (0, 0xffffffff) else None),
                             "source_medium_offset": medium, "source_low_offset": low})
         models.append({"index": index, "scale": scale, "flags": flags,
                        "animation_time": header[5], "objects": objects,

@@ -18,6 +18,7 @@ from ssx3_interactives import map_names
 from tricky_assets import (FormatError, cofb_index, parse_aip, parse_ltg,
                            parse_pbd, read_cofb_member, read_iso_file)
 from tricky_collision import parse_ssf
+from tricky_object_effects import read_logic
 from tricky_courses import COURSES
 
 
@@ -30,37 +31,6 @@ PROPERTY_TYPES = {
 }
 PUSHES = {"directional_push", "lap_lift", "vertical_lift", "tube_exit"}
 VISUAL = {"uv_scroll", "texture_flip", "fence_flex", "flag_wind", "particles"}
-
-
-def read_logic(data: bytes) -> tuple[list[tuple], list[list[dict]], list[dict]]:
-    pairs = struct.unpack_from("<16I", data, 12)
-    slot_count, slot_at = pairs[:2]
-    effect_count, effect_at = pairs[6:8]
-    function_count, function_at = pairs[8:10]
-    base = effect_at + effect_count * 8
-
-    def chain(count: int, offset: int) -> list[dict]:
-        nodes = []
-        pos = base + offset
-        for _ in range(count):
-            main, size = struct.unpack_from("<2I", data, pos)
-            if size < 8 or size % 4 or pos + size > len(data):
-                raise FormatError(f"invalid SSF effect at {pos:#x}")
-            words = struct.unpack_from("<" + "I" * ((size - 8) // 4), data, pos + 8)
-            nodes.append({"main": main, "sub": words[0] if main in (0, 2) else None,
-                          "words": words, "offset": pos})
-            pos += size
-        return nodes
-
-    slots = [struct.unpack_from("<7i", data, slot_at + i * 28) for i in range(slot_count)]
-    effects = [chain(*struct.unpack_from("<2I", data, effect_at + i * 8))
-               for i in range(effect_count)]
-    functions = []
-    for i in range(function_count):
-        at = function_at + i * 24
-        name = data[at + 8:at + 24].split(b"\0")[0].decode("ascii")
-        functions.append({"name": name, "nodes": chain(*struct.unpack_from("<2I", data, at))})
-    return slots, effects, functions
 
 
 def mechanic(node: dict) -> str | None:
@@ -98,6 +68,14 @@ def audit(course, iso: Path, overlay: Path) -> dict:
     replacement_ids = {mode: {item["source_instance"] for item in report["native_replacements"]}
                        for mode, report in native.items()}
     boost_ids = {mode: set(report["source_boost_instances"]) for mode, report in native.items()}
+    animated_ids = {mode: set(report.get("source_animated_instances", [])) for mode, report in native.items()}
+    reset_ids = {mode: set(report.get("source_reset_instances", [])) for mode, report in native.items()}
+    fragment_ids = {mode: set(report.get("source_mesh_anim_instances", [])) for mode, report in native.items()}
+    hidden_ids = {mode: set(report.get("source_hard_hide_instances", [])) for mode, report in native.items()}
+    teleport_ids = {mode: {item["source_instance"] for item in report.get("native_teleports", [])}
+                    for mode, report in native.items()}
+    scroll_ids = {mode: set(report.get("source_uv_scroll_instances", [])) for mode, report in native.items()}
+    flip_ids = {mode: set(report.get("source_texture_flip_instances", [])) for mode, report in native.items()}
 
     # ActOnInstance names an effect header on another instance, not a slot.
     # Collision roots alone miss sewer gates, falling trees and wall fragments.
@@ -138,6 +116,20 @@ def audit(course, iso: Path, overlay: Path) -> dict:
                         status = "native_replacement"
                     elif manifest and kind in PUSHES and target in boost_ids[mode]:
                         status = "native_volume"
+                    elif kind == "scripted_reset" and target in reset_ids.get(mode, set()):
+                        status = "native_contact_script"
+                    elif kind in ("object_animation", "delta_animation", "combo_animation") and target in animated_ids.get(mode, set()):
+                        status = "native_curve_script"
+                    elif kind == "mesh_break_animation" and target in fragment_ids.get(mode, set()):
+                        status = "native_fragment_script"
+                    elif kind == "breakable_hide" and target in hidden_ids.get(mode, set()):
+                        status = "native_dead_node_script"
+                    elif kind == "teleport" and target in teleport_ids.get(mode, set()):
+                        status = "native_placement_script"
+                    elif kind == "uv_scroll" and target in scroll_ids.get(mode, set()):
+                        status = "native_material_script"
+                    elif kind == "texture_flip" and target in flip_ids.get(mode, set()):
+                        status = "native_material_script"
                     elif manifest is None:
                         status = "unprepared"
                     elif kind == "roller_response":

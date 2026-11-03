@@ -182,6 +182,13 @@ pub fn fatal(c: &mut Cpu, pc: u32, msg: &str) {
             m!(c).kernel.current,
             c.cycles
         );
+        if let Some(dir) = std::env::var_os("SSX3_DEBUG_SNAPSHOT") {
+            let dir = std::path::PathBuf::from(dir);
+            let _ = std::fs::create_dir_all(&dir);
+            let _ = std::fs::write(dir.join("halt-ram.bin"), &c.bus.ram[..]);
+            let _ = std::fs::write(dir.join("halt-state.txt"), format!(
+                "target={pc:#x}\nra={ra:#x}\nregisters={:?}\n", c.g));
+        }
         m!(c).kernel.halted = Some(format!("{msg} at {pc:#010x}"));
     }
     c.pc = IDLE | UNWIND;

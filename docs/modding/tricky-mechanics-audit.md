@@ -9,8 +9,13 @@ partie, aucun test automatisé et aucun replay pour cet audit.
 Suivi : le [plan d'implémentation](../plans/tricky-mechanics-implementation.md)
 consigne les corrections postérieures à cet état de référence. Le Freestyle
 solo, les temps initiaux extraits de l'exécutable et les événements de temps
-SOP sont maintenant implémentés ; les autres lignes ci-dessous restent
-l'inventaire de départ à reprendre.
+SOP sont maintenant implémentés. Les huit murs de Pipedream et le téléporteur
+de Merqury disposent de scripts natifs ; un mur et la traversée du portail ont
+été observés en jeu. Les courbes des objets et les effets de texture persistants
+sont aussi importés, avec une observation partielle de leurs acteurs natifs.
+Les lignes ci-dessous restent l'inventaire de départ, pas le statut actuel
+de chaque correction. Les séquences différées/conditionnelles, les vitres
+fissurables, les movers et plusieurs familles de décors restent à traiter.
 
 Oui, plusieurs mécaniques restent absentes. Les plus importantes pour le
 parcours sont les murs destructibles de Pipedream, le téléporteur de Merqury,

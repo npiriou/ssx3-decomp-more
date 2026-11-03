@@ -5358,6 +5358,9 @@
 0x00232cf8    StartScreen_TryExit
 0x00232d18    StartScreen_Update
 0x00316ef8    App_SetNextState
+# Tricky native prefab animation
+0x002fbcb8    WorldObjFactory_AnimObject
+0x00341aa0    AnimObject_ctor
 # debug slots (installed only by an env switch; see debug.rs)
 0x002ec478    LensFX_v04
 # tick rate: 60 Hz timelines (screen-script frames, the race countdown's lights), the air predictor's in-between ticks

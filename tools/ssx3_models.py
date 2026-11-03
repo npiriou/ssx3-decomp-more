@@ -102,6 +102,28 @@ def _dma_reference(data: bytearray, at: int, offset: int, payload: bytes) -> Non
     struct.pack_into("<4I", data, at, 0x30000000 | (len(payload) // 16), offset, 0, 0)
 
 
+def _pack_animation(out: bytearray, animation: dict) -> int:
+    # cPS2ChunkResolve_v06 relocates the part's third word, then v11 fixes
+    # descriptor+0x20 and each channel pointer against the MDR model base.
+    # Its channel callback v12 likewise fixes the segment pointer at +4.
+    _pad(out)
+    start = len(out)
+    channels = animation["channels"]
+    table = start + 36
+    out.extend(struct.pack("<6f3I", *animation["base_position"],
+                           *animation["base_rotation"], animation["mask"],
+                           len(channels), table))
+    out.extend(b"\0" * (4 * len(channels)))
+    for index, curves in enumerate(channels):
+        _pad(out)
+        channel = len(out)
+        struct.pack_into("<I", out, table + index * 4, channel)
+        out.extend(struct.pack("<2I", len(curves), channel + 8))
+        for curve in curves:
+            out.extend(struct.pack("<6f", *curve))
+    return start
+
+
 def pack_model(model: dict, section_id: int, *, resource_id: int | None = None,
                material_rids: dict[int, int] | None = None) -> tuple[bytes, list[dict]]:
     """Return a type-2 payload and its group/batch layout for instances."""
@@ -128,13 +150,15 @@ def pack_model(model: dict, section_id: int, *, resource_id: int | None = None,
                 out.extend(struct.pack("<hHI", material_indices[mesh["material"]], 1, 0))
                 groups.append({"header": header, "part": index,
                                "material": mesh["material"], "batches": _batches(mesh)})
+        animation = (_pack_animation(out, part["animation"])
+                     if part.get("animation") is not None else 0)
         matrix = 0xffffffff
         if part["matrix"] is not None:
             _pad(out)
             matrix = len(out)
             out.extend(struct.pack("<16f", *part["matrix"]))
         struct.pack_into("<4I", out, object_table + index * 16,
-                         part["parent"], geometry, 0, matrix)
+                         part["parent"], geometry, animation, matrix)
     _pad(out)
     model_data = len(out)
     chain_size = sum((2 * len(group["batches"]) + 1) * 16 for group in groups)
@@ -160,7 +184,9 @@ def pack_model(model: dict, section_id: int, *, resource_id: int | None = None,
     out.extend(dma)
     rid = model["index"] if resource_id is None else resource_id
     struct.pack_into("<5If3f2I", out, 0, (rid << 8) | section_id,
-                     len(objects), object_table, 40, 0, 0.0,
+                     # Tricky's duration is frames30; both games' cubic key
+                     # times are seconds, and native MDR duration is seconds.
+                     len(objects), object_table, 40, 0, model.get("animation_time", 0.0) / 30.0,
                      *model["scale"], model_data, len(materials))
     return bytes(out), groups
 

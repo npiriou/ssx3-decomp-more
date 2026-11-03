@@ -272,6 +272,22 @@ def parse_pbd(data: bytes, include_patches: bool) -> dict:
             }
             for index in range(material_count)
         ]
+    # Source flipbooks are counted lists of SSH indices. A list is material
+    # data; its presence alone does not start an object's playback clock.
+    flipbooks = []
+    flip_at = offsets["texture_flipbooks"]
+    for _ in range(counts["texture_flipbooks"]):
+        (frame_count,), flip_at = _unpack(data, flip_at, "<I")
+        if frame_count > 65535:
+            raise FormatError("Tricky texture flipbook has too many frames")
+        frames, flip_at = _unpack(data, flip_at, "<" + "I" * frame_count)
+        flipbooks.append(list(frames))
+    if include_patches:
+        result["texture_flipbooks"] = flipbooks
+        for material in result["materials"]:
+            index = material["texture_flipbook_id"]
+            if index < -1 or index >= len(flipbooks):
+                raise FormatError("Tricky material references a missing texture flipbook")
     spline_start = offsets["splines"]
     segment_start = offsets["spline_segments"]
     spline_count = counts["splines"]

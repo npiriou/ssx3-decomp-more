@@ -174,6 +174,7 @@ pub fn read_markers(c: &mut Cpu) {
             }
         }
 
+        debug_start(c, r(c, S1));
         c.cycles += 12;
         c.g[V0][0] = sx(r(c, S0).wrapping_sub(r(c, S7)));
         frame.restore(c, S1, 0x80);
@@ -188,4 +189,37 @@ pub fn read_markers(c: &mut Cpu) {
         frame.close(c);
         Ok(())
     });
+}
+
+/// Optional native start marker for focused, windowed development. The
+/// serialized archives and normal start/recovery markers remain unchanged.
+fn debug_start(c: &mut Cpu, paths: u32) {
+    if crate::custom_tracks::active().is_none() { return }
+    let Ok(value) = std::env::var("SSX3_DEBUG_START") else { return };
+    let fields: Vec<_> = value.split(',').map(str::trim).collect();
+    if fields.len() != 8 { return }
+    let Some(values) = fields[..6].iter().map(|s| s.parse::<f32>().ok()).collect::<Option<Vec<_>>>() else { return };
+    let (Ok(ai), Ok(race)) = (fields[6].parse::<u32>(), fields[7].parse::<u32>()) else { return };
+    if !values.iter().all(|v| v.is_finite())
+        || ai >= c.bus.read32(paths + 8) || race >= c.bus.read32(paths + 0x10) {
+        return;
+    }
+    let length = values[3..].iter().map(|v| v * v).sum::<f32>().sqrt();
+    if !length.is_finite() || length < 1e-6 { return }
+    let count = c.bus.read32(paths);
+    let entries = c.bus.read32(paths + 4);
+    for i in 0..count {
+        let marker = entries + i * MARKER_BYTES;
+        if c.bus.read32(marker) != 0 || c.bus.read32(marker + 4) != 1 { continue }
+        for axis in 0..3 {
+            c.bus.write32(marker + 8 + axis * 4, values[axis as usize].to_bits());
+            c.bus.write32(marker + 0x14 + axis * 4, (values[axis as usize + 3] / length).to_bits());
+        }
+        let race_path = c.bus.read32(paths + 0x14) + race * 0x3c;
+        let ai_path = c.bus.read32(paths + 0xc) + ai * 0x40;
+        c.bus.write32(marker + 0x20, race_path);
+        c.bus.write32(marker + 0x24, ai_path);
+        eprintln!("[tricky] debug start {:?}, AI path {ai}, race path {race}", &values[..3]);
+        break;
+    }
 }

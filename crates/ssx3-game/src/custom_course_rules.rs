@@ -66,6 +66,19 @@ pub fn restart() {
     rules.timer_seeded = false;
 }
 
+/// A native warp changes position discontinuously. Preserve lap progress and
+/// awarded time gates, while restarting only the spatial-volume contact sweep.
+pub fn relocated(address: u32) {
+    let mut rules = RULES.lock().unwrap();
+    if let Some(rider) = rules.riders.get_mut(&address) {
+        rider.previous = None;
+        rider.stage = 0;
+        for contact in &mut rider.contacts {
+            *contact = Contact::default();
+        }
+    }
+}
+
 /// Distance queries used by standings and AI must include later circuits.
 /// The raw rider fields stay local to their TrackPath for event projection.
 pub fn distance(c: &mut Cpu, address: u32, local: f32) -> f32 {
@@ -311,6 +324,17 @@ pub fn update(c: &mut Cpu, address: u32) -> Option<BoostUpdate> {
         contacts: (0..volumes.len()).map(|_| Contact::default()).collect(),
         time_gates: HashSet::new(),
     });
+    // Native main state 3 relocates the rider during reset. Do not sweep the
+    // old-to-respawn segment through unrelated lifts or the Tokyo lap mouth.
+    let owner = c.bus.read32(address + 0x77c);
+    if owner != 0 && c.bus.read32(owner + 0xde0) == 3 {
+        rider.previous = None;
+        rider.stage = 0;
+        for contact in &mut rider.contacts {
+            *contact = Contact::default();
+        }
+        return None;
+    }
     let position = vec(c, address + 0x110);
     let previous = rider.previous.unwrap_or(position);
     rider.previous = Some(position);

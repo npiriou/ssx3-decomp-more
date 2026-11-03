@@ -30,6 +30,9 @@ pub mod call;
 /// Stable host IDs for additional Single Event peaks and courses.
 pub mod custom_tracks;
 pub mod custom_course_rules;
+pub mod custom_script_effects;
+pub mod custom_anim_object_factory;
+pub mod custom_anim_object_ctor;
 pub mod custom_race_path_select;
 pub mod custom_race_distance;
 pub mod custom_base_path_read;
@@ -193,6 +196,8 @@ pub fn overrides() -> Vec<(u32, GuestFn, &'static str)> {
     v.extend_from_slice(custom_collision_resolve::OVERRIDES);
     v.extend_from_slice(custom_world_resolve::OVERRIDES);
     v.extend_from_slice(custom_static_objects::OVERRIDES);
+    v.extend_from_slice(custom_anim_object_factory::OVERRIDES);
+    v.extend_from_slice(custom_anim_object_ctor::OVERRIDES);
     v.extend_from_slice(custom_static_object_ctor::OVERRIDES);
     v.extend_from_slice(custom_surface_defaults::OVERRIDES);
     v.extend_from_slice(custom_attach_modifier::OVERRIDES);
