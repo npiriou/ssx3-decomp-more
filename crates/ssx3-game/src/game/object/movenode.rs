@@ -2918,38 +2918,56 @@ pub fn mod_obj_add_parent_modifier(c: &mut Cpu) {
 /// roller modifier, build it and install it as the transform modifier.
 pub fn mod_obj_add_roller_modifier(c: &mut Cpu) {
     guest(c, |c| {
-        c.cycles += 31;
-        let frame = Frame::open(c, 0x50);
-        frame.save(c, S0, 0x40);
-        frame.save(c, S1, 0x30);
-        c.g[S0][0] = c.g[A1][0];
-        frame.save(c, S2, 0x20);
-        c.g[S1][0] = c.g[A2][0];
-        frame.save(c, S3, 0x10);
-        c.g[S2][0] = c.g[A3][0];
-        c.g[S3][0] = c.g[A0][0];
-        c.g[A1][0] = sx(0x490000);
-        frame.save_ra(c, 0);
-        c.g[A0][0] = 0x2d0;
-        c.g[A1][0] = sx(0x490000u32.wrapping_sub(0x16f8));
-        c.g[A2][0] = 0x20000000;
-        c.g[A3][0] = 0;
-        callee::MEM_ALLOC_NAMED.call(c, 0x0035_5df8)?;
-        c.g[A1][0] = c.g[S0][0];
-        c.g[A2][0] = c.g[S1][0];
-        c.g[A3][0] = c.g[S2][0];
-        c.g[A0][0] = c.g[V0][0];
-        callee::ROLLER_MODIFIER_CTOR.call(c, 0x0035_5e0c)?;
-        c.g[A0][0] = c.g[S3][0];
-        c.g[A1][0] = c.g[V0][0];
-        callee::MOD_OBJ_SET_TRANSFORM_MODIFIER_3.call(c, 0x0035_5e18)?;
-        frame.restore(c, S0, 0x40);
-        frame.restore(c, S1, 0x30);
-        frame.restore(c, S2, 0x20);
-        frame.restore(c, S3, 0x10);
-        frame.restore_ra(c, 0);
-        frame.close(c);
-        Ok(())
+        let frame = Frame { size: 0x50 };
+        let mut pc = c.pc;
+        loop {
+            match pc {
+                0x0035_5db8 => {
+                    c.cycles += 31;
+                    Frame::open(c, 0x50);
+                    frame.save(c, S0, 0x40);
+                    frame.save(c, S1, 0x30);
+                    c.g[S0][0] = c.g[A1][0];
+                    frame.save(c, S2, 0x20);
+                    c.g[S1][0] = c.g[A2][0];
+                    frame.save(c, S3, 0x10);
+                    c.g[S2][0] = c.g[A3][0];
+                    c.g[S3][0] = c.g[A0][0];
+                    c.g[A1][0] = sx(0x490000);
+                    frame.save_ra(c, 0);
+                    c.g[A0][0] = 0x2d0;
+                    c.g[A1][0] = sx(0x490000u32.wrapping_sub(0x16f8));
+                    c.g[A2][0] = 0x20000000;
+                    c.g[A3][0] = 0;
+                    callee::MEM_ALLOC_NAMED.call(c, 0x0035_5df8)?;
+                    pc = 0x0035_5df8;
+                }
+                0x0035_5df8 => {
+                    c.g[A1][0] = c.g[S0][0];
+                    c.g[A2][0] = c.g[S1][0];
+                    c.g[A3][0] = c.g[S2][0];
+                    c.g[A0][0] = c.g[V0][0];
+                    callee::ROLLER_MODIFIER_CTOR.call(c, 0x0035_5e0c)?;
+                    pc = 0x0035_5e0c;
+                }
+                0x0035_5e0c => {
+                    c.g[A0][0] = c.g[S3][0];
+                    c.g[A1][0] = c.g[V0][0];
+                    callee::MOD_OBJ_SET_TRANSFORM_MODIFIER_3.call(c, 0x0035_5e18)?;
+                    pc = 0x0035_5e18;
+                }
+                0x0035_5e18 => {
+                    frame.restore(c, S0, 0x40);
+                    frame.restore(c, S1, 0x30);
+                    frame.restore(c, S2, 0x20);
+                    frame.restore(c, S3, 0x10);
+                    frame.restore_ra(c, 0);
+                    frame.close(c);
+                    return Ok(());
+                }
+                _ => { c.jump_out(pc, 0x0035_5db8, 0x0035_5e38); return Ok(()); }
+            }
+        }
     })
 }
 

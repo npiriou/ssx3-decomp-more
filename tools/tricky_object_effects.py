@@ -90,6 +90,7 @@ def pack_object_scripts(ssf, pbd, models, collision, instances, source_to_instan
     flips = set()
     material_lifetimes = set()
     counters = {}
+    rollers = set()
     receiver_kinds = {}
     tasks = {}
     task_ids = {}
@@ -244,6 +245,18 @@ def pack_object_scripts(ssf, pbd, models, collision, instances, source_to_instan
                 rail, enabled = words
                 commands.append((119, [(0, (rail << 8) | section, 1), (1, enabled, 1)]))
                 rail_switches.add(rail)
+            elif main == 0 and words[0] == 0:
+                if len(words) != 7 or not all(math.isfinite(float_value(v)) for v in words[1:]):
+                    raise FormatError("invalid Tricky Roller parameters")
+                prop = collision["properties"][collision["instance_properties"][owner]]
+                if prop["collision_mode"] != 3 or prop["physics_index"] < 0:
+                    raise FormatError("Tricky Roller requires its authored native sphere body")
+                # Runtime resolves the target's own body before creating its
+                # native ModObj/roller. Raw launch XYZ are source velocities,
+                # not a normalized direction with an invented launch speed.
+                commands.append((122, [(0, instance_rid(owner), 1)]
+                                 + [(i, value, 2) for i, value in enumerate(words[1:], 1)]))
+                rollers.add(owner)
             elif main == 0 and words[0] == 6:
                 if len(words) != 3 or not 0 <= words[1] <= 32767:
                     raise FormatError("invalid Tricky counter parameters")
@@ -405,7 +418,7 @@ def pack_object_scripts(ssf, pbd, models, collision, instances, source_to_instan
     # Do not schedule loops consisting only of unimplemented sounds/emitters.
     # Keep every continuation which reaches a supported action, including
     # through other continuations; remove only code with no native consumer.
-    meaningful = {2, 3, 4, 5, 9, 13, 21, 22, 28, 111, 112, 119}
+    meaningful = {2, 3, 4, 5, 9, 13, 21, 22, 28, 111, 112, 119, 122}
 
     def action(call):
         builtin, args = call
@@ -470,6 +483,7 @@ def pack_object_scripts(ssf, pbd, models, collision, instances, source_to_instan
             "source_texture_flip_instances": sorted(flips),
             "source_finite_material_properties": sorted(material_lifetimes),
             "source_counter_configs": [[owner, *config] for owner, config in sorted(counters.items())],
+            "source_roller_instances": sorted(rollers),
             "source_leave_latches": sorted(owner for owner, slot in roots if slot == 3),
             "source_end_latches": sorted(owner for owner, slot in roots if slot == 4),
             "native_deferred_functions": len(live_tasks),

@@ -35,6 +35,8 @@ pub mod custom_script_queue;
 mod custom_script_predicates;
 mod custom_script_materials;
 mod custom_counter_trace;
+mod custom_roller_runtime;
+mod custom_roller_update;
 mod custom_contact_trace;
 pub mod custom_rail_rules;
 pub mod custom_script_manager_update;

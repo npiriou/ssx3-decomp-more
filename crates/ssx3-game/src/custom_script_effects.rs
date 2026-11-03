@@ -74,7 +74,7 @@ fn teleport_frame(c: &mut Cpu, index: i32, matrix: u32) -> bool {
 /// output is initialized first, so the VM's existing unwind continuation is
 /// also valid if the native action yields.
 pub fn builtin(c: &mut Cpu, id: u32, back: u32) -> Option<Flow> {
-    if !(111..=121).contains(&id) {
+    if !(111..=122).contains(&id) {
         return None;
     }
     let out = c.g[A0][0] as u32;
@@ -83,6 +83,9 @@ pub fn builtin(c: &mut Cpu, id: u32, back: u32) -> Option<Flow> {
     // Their retail function-table entries are empty; do not fall through to
     // a null native target if a late callback sees an inactive course.
     if crate::custom_tracks::active().is_none() { return Some(Ok(())) }
+    if id == 122 {
+        return Some(crate::custom_roller_runtime::begin(c, back));
+    }
     if id == 121 {
         crate::custom_script_materials::register(c);
         return Some(Ok(()));
@@ -159,16 +162,17 @@ pub fn builtin(c: &mut Cpu, id: u32, back: u32) -> Option<Flow> {
 /// Complete pure-memory work after a native call, including resumed calls.
 /// Priming both distance fields prevents a teleport from collecting the time
 /// gates/splits along the skipped section of the old path.
-pub fn after_builtin(c: &mut Cpu, id: u32) {
+pub fn after_builtin(c: &mut Cpu, id: u32, back: u32) -> Flow {
+    if id == 122 { return crate::custom_roller_runtime::after(c, back) }
     if id == 120 && crate::custom_tracks::active().is_some() {
         crate::custom_script_predicates::finish(c);
-        return;
+        return Ok(());
     }
-    if !matches!(id, 112 | 114) || crate::custom_tracks::active().is_none() { return }
-    let Some((_, index, address)) = rider(c) else { return };
+    if !matches!(id, 112 | 114) || crate::custom_tracks::active().is_none() { return Ok(()) }
+    let Some((_, index, address)) = rider(c) else { return Ok(()) };
     if id == 114 {
         let path = c.bus.read32(address + 0xab4);
-        if path == 0 { return }
+        if path == 0 { return Ok(()) }
         let remaining = FpuF32(c.bus.read32(path + 0x38));
         let distance = (remaining - FpuF32(c.f[0])).0;
         c.bus.write32(address + 0x4d0, distance);
@@ -182,4 +186,5 @@ pub fn after_builtin(c: &mut Cpu, id: u32) {
         let position: [f32; 3] = std::array::from_fn(|i| f32::from_bits(c.bus.read32(address + 0x110 + i as u32 * 4)));
         eprintln!("[tricky] native teleport rider {index}: {position:?}");
     }
+    Ok(())
 }

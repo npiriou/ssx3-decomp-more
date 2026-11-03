@@ -4264,7 +4264,7 @@ pub fn luno_vm_execute(c: &mut Cpu) {
                     continue;
                 }
                 0x00223fa4 => {
-                    crate::custom_script_effects::after_builtin(c, (r(c, S2) >> 16) & 255);
+                    crate::custom_script_effects::after_builtin(c, (r(c, S2) >> 16) & 255, 0x0022_3fa4)?;
                     c.g[V0][0] = 0xc;
                     c.g[V1][0] = c.lw(r(c, S5));
                     c.mult(0, 16, 16, 2);

@@ -51,6 +51,7 @@ fn sync(queue: &mut Queue) -> bool {
 pub fn restart() {
     crate::custom_rail_rules::restart();
     crate::custom_script_materials::restart();
+    crate::custom_roller_runtime::restart();
     *QUEUE.lock().unwrap() = Queue::default();
 }
 
