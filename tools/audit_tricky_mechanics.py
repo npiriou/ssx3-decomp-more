@@ -86,6 +86,7 @@ def audit(course, iso: Path, overlay: Path) -> dict:
                    for mode, report in native.items()}
     roller_ids = {mode: set(report.get("source_roller_instances", [])) for mode, report in native.items()}
     pop_nodes = {mode: {tuple(row) for row in report.get("source_pop_burst_nodes", [])}
+                       | {tuple(row) for row in report.get("source_emitter_nodes", [])}
                  for mode, report in native.items()}
     cracked_nodes = {mode: {tuple(row) for row in report.get("source_cracked_nodes", [])}
                      for mode, report in native.items()}

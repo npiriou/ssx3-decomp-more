@@ -555,7 +555,13 @@ pub fn emitter_render(c: &mut Cpu) {
             c.g[A1][0] = sx(!0x3e0u32);
             c.g[V1][0] = sx(r32(c, V1).wrapping_add(r32(c, V0)));
             c.g[A2][0] = 0xffff_ffff_ffbf_ffff;
-            let layer = lw(c, p(r32(c, V1), 0));
+            // Imported descriptors carry an explicit native GS preset.
+            // Source Tricky blend4 uses ALPHA0x46, absent from this native
+            // emitter's three-entry shortcut table. Ordinary emitters keep
+            // their exact table lookup and register behavior.
+            let layer = if kind as u32 & 0xffff_0000 == 0x4250_0000 {
+                sx(kind as u32 & 31)
+            } else { lw(c, p(r32(c, V1), 0)) };
             c.g[T1][0] = layer;
             copy_render_state(c, 2, 3, A3, top, top);
             c.g[T5][0] = 0x40_0000;
@@ -619,6 +625,7 @@ pub fn emitter_render(c: &mut Cpu) {
             // texture id and draw.
             let _u = ldf(c, 0, p(e, 0x184));
             c.g[V0][0] = lw(c, p(e, 0x4));
+            let sprite = c.g[V0][0] as u32;
             c.cvt_w_s(1, 0);
             c.mfc1(V1, 1);
             let a = lw(c, p(context, ctx::TOP)) as u32;
@@ -626,7 +633,12 @@ pub fn emitter_render(c: &mut Cpu) {
             c.g[V0][0] = sx(r32(c, V0).wrapping_add(r32(c, V1)));
             c.g[V0][0] = sx(r32(c, V0) << 2);
             c.g[T4][0] = sx(r32(c, T4).wrapping_add(r32(c, V0)));
-            let tex = lw(c, p(r32(c, T4), ctx::TEX_IDS));
+            // TX-tagged values name ordinary, resident world textures.
+            // This preserves both games' actual images without replacing
+            // a shared native FX slot used by riders or other courses.
+            let tex = if sprite & 0xffff_0000 == 0x5458_0000 {
+                sx((sprite & 0xffff).wrapping_add(r32(c, V1)))
+            } else { lw(c, p(r32(c, T4), ctx::TEX_IDS)) };
             c.g[V1][0] = tex;
             c.sh(p(a, 0x10), tex);
             let vt = lw(c, p(context, ctx::VTABLE)) as u32;

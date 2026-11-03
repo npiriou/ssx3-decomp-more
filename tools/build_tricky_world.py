@@ -34,6 +34,7 @@ from tricky_collision import parse_ssf
 from tricky_ssh import inspect_world_ssh, parse_shps, to_world_ssh
 from tricky_courses import Course, course
 from ssx3_tricky_sky import import_sky
+from ssx3_particle_sprites import ParticleSprites
 from tricky_gameplay import pack_gameplay
 from tricky_object_effects import pack_object_scripts, source_pickups, mode_hidden_instances
 from tricky_race_settings import showoff_catalog
@@ -144,9 +145,6 @@ def build(SSX3_iso: Path, tricky_iso: Path, output: Path, *,
     source_to_instance = {source: rid for rid, source in enumerate(race_instances)}
     interactives.prepare(section_id, leaf_id, len(model_ids), len(material_ids),
                          source_to_instance)
-    object_summary = pack_object_scripts(
-        ssf_data, pbd, models, collision_data, race_instances, source_to_instance,
-        interactives, section_id, mode)
     source_textures = {patch["texture_assignment"] for patch in pbd["patches"]}
     source_textures.update(material["texture_id"] for material in materials
                            if material["texture_id"] >= 0)
@@ -164,6 +162,10 @@ def build(SSX3_iso: Path, tricky_iso: Path, output: Path, *,
     texture_ids = {rid for rid, _ in textures}
     lightmap_ids = {rid for rid, _ in lightmaps}
     lightmap_sizes = {rid: struct.unpack_from("<2H", body, 4) for rid, body in lightmaps}
+    particle_sprites = ParticleSprites(tricky_iso, texture_base + max(texture_ids, default=-1) + 1)
+    object_summary = pack_object_scripts(
+        ssf_data, pbd, models, collision_data, race_instances, source_to_instance,
+        interactives, section_id, mode, particle_sprites=particle_sprites)
     if max(texture_ids, default=-1) + texture_base > 32767:
         raise FormatError("Garibaldi texture IDs exceed the SSX 3 format")
     leaf = bytearray()
@@ -176,6 +178,9 @@ def build(SSX3_iso: Path, tricky_iso: Path, output: Path, *,
         inspect_world_ssh(body, lightmap=True)
         leaf.extend(pack_resource(10, 255, lightmap_base + rid, body))
     for rid, body in interactives.textures():
+        leaf.extend(pack_resource(9, 255, rid, body))
+    for rid, body in particle_sprites.records():
+        inspect_world_ssh(body, lightmap=False)
         leaf.extend(pack_resource(9, 255, rid, body))
     shared = bytearray()
     for material in materials:
@@ -325,6 +330,7 @@ def build(SSX3_iso: Path, tricky_iso: Path, output: Path, *,
         "mode": mode, "source_archive": selected.archive,
         **gameplay_summary,
         **object_summary,
+        **particle_sprites.summary(),
         "source_paths": "SOP" if mode == "freestyle" else "AIP",
         "source_timing": timing,
         "sky": sky_summary,
