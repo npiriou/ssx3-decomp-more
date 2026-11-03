@@ -338,6 +338,11 @@ def build(SSX3_iso: Path, tricky_iso: Path, output: Path, *,
         "model_count": len(model_ids) + len(interactives.model_ids),
         "material_count": len(material_ids) + len(interactives.material_ids),
         "source_model_count": len(models),
+        "native_animation_base_pose_ranges": sum(
+            bool(channel and channel[0][4] > 0)
+            for model in models if model["index"] in model_ids
+            for part in model["objects"] if part.get("animation") is not None
+            for channel in part["animation"]["channels"]),
         "source_mode_hidden_instances": sorted(mode_hidden),
         "source_mode_hidden_dynamic_targets": sorted(mode_dynamic_hidden),
         "instance_count": len(race_instances) + len(interactives.posts) + len(interactives.emitter_anchors),

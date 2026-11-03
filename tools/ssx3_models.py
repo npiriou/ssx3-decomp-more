@@ -109,12 +109,24 @@ def _pack_animation(out: bytearray, animation: dict) -> int:
     _pad(out)
     start = len(out)
     channels = animation["channels"]
+    defaults = [*animation["base_position"], *animation["base_rotation"]]
+    axes = [axis for axis in range(6) if animation["mask"] & (1 << axis)]
     table = start + 36
     out.extend(struct.pack("<6f3I", *animation["base_position"],
                            *animation["base_rotation"], animation["mask"],
                            len(channels), table))
     out.extend(b"\0" * (4 * len(channels)))
-    for index, curves in enumerate(channels):
+    for index, source_curves in enumerate(channels):
+        curves = source_curves
+        if curves and curves[0][4] > 0:
+            # Native FindKeySegment351a80 selects the first key before its
+            # lower bound; Evaluate351538 then extrapolates at the raw time.
+            # Tricky can omit an axis until later in a clip (Aloha's idle
+            # punching ball has no rotation key before 2.0333s). Keep its
+            # authored base pose there instead of extrapolating a later
+            # impact polynomial by hundreds of thousands of degrees.
+            curves = [[0., 0., 0., defaults[axes[index]], 0., curves[0][4]],
+                      *curves]
         _pad(out)
         channel = len(out)
         struct.pack_into("<I", out, table + index * 4, channel)
