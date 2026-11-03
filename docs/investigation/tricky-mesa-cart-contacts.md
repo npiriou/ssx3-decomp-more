@@ -45,7 +45,9 @@ WorldObj through13aad0, checks its virtual+60 and conditionally calls its
 virtual+98 with contact data before resolving the Roller's response. The
 helper's presence alone does not establish its runtime scheduling: this pass
 found neither a direct JAL/J reference to13f330 nor its absolute address in the
-supplied ELF. Do not install a guessed per-frame overlap scan on that basis.
+supplied ELF. The follow-up search also found no LUI+ADDIU/DADDIU/ORI sequence
+forming that callback address in the next64 instructions. Do not install a
+guessed per-frame overlap scan on that basis.
 The source call path, target callback meaning and correspondence to each wooden
 barrier still need to be established before importing prop-to-prop dispatch.
 

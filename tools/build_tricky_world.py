@@ -189,7 +189,7 @@ def build(SSX3_iso: Path, tricky_iso: Path, output: Path, *,
     object_summary = pack_object_scripts(
         ssf_data, pbd, models, collision_data, race_instances, source_to_instance,
         interactives, section_id, mode, particle_sprites=particle_sprites,
-        force_leases=contact_volumes)
+        force_leases=contact_volumes, initial_hidden=mode_dynamic_hidden)
     if max(texture_ids, default=-1) + texture_base > 32767:
         raise FormatError("Garibaldi texture IDs exceed the SSX 3 format")
     leaf = bytearray()

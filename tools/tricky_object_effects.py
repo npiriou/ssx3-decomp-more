@@ -47,7 +47,8 @@ def mode_hidden_instances(ssf, mode):
 
     LTG's Showoff list is not the complete mode filter: RaceMode/ShowoffMode
     also hide objects through ordinary SSF graphs, alongside rail switches.
-    Retain any target referenced by another graph, since it can be revived.
+    Retain targets needed by later actions. A reference which only hides
+    already-hidden scenery cannot revive it, including linked glass chains.
     """
     _, chains, functions = read_logic(ssf)
 
@@ -77,10 +78,43 @@ def mode_hidden_instances(ssf, mode):
         if function["name"] in ("ShowoffMode", "RaceMode", "FreerideMode"):
             visit(function["nodes"], None, set(), hidden if function["name"] == entry else set(),
                   mode_offsets)
+    # A hide-only graph may wait or forward to other hide-only graphs. Find
+    # the closed set, including cycles, without executing any source graph.
+    # Keep predicates and every other action conservative: they can consume
+    # gameplay state or need an instance even without making it visible.
+    graphs = {("chain", i): nodes for i, nodes in enumerate(chains)}
+    graphs.update({("function", i): function["nodes"]
+                   for i, function in enumerate(functions)})
+    links = {}
+    for key, nodes in graphs.items():
+        children = set()
+        for node in nodes:
+            main, words = node["main"], node["words"]
+            if main == 0 and words in ((5, 2), (5, 4)):
+                continue
+            if main == 4:
+                continue
+            if main == 7:
+                children.add(("chain", words[1]))
+            elif main in (21, 26):
+                children.add(("function", words[0]))
+            else:
+                break
+        else:
+            links[key] = children
+    hide_only = set(links)
+    while True:
+        closed = {key for key in hide_only if links[key] <= hide_only}
+        if closed == hide_only:
+            break
+        hide_only = closed
     referenced = set()
     for nodes in chains + [function["nodes"] for function in functions]:
         for node in nodes:
-            if node["main"] in (7, 24) and node["offset"] not in mode_offsets:
+            if node["offset"] in mode_offsets:
+                continue
+            if node["main"] == 24 or (node["main"] == 7
+                    and ("chain", node["words"][1]) not in hide_only):
                 referenced.add(node["words"][0])
     return hidden - referenced, hidden & referenced
 
@@ -119,7 +153,8 @@ def source_pickups(ssf, collision, instances):
 
 
 def pack_object_scripts(ssf, pbd, models, collision, instances, source_to_instance,
-                           interactives, section, mode, *, particle_sprites, force_leases=()):
+                           interactives, section, mode, *, particle_sprites, force_leases=(),
+                           initial_hidden=()):
     slots, chains, functions = read_logic(ssf)
     selected = set(instances)
     records = {}
@@ -638,6 +673,17 @@ def pack_object_scripts(ssf, pbd, models, collision, instances, source_to_instan
                 walk(expand(chains[chain], owner, {(owner, chain)}), owner,
                      native_slot, set(), commands)
                 roots[owner, native_slot] = commands
+    initial_hidden = set(initial_hidden) & selected
+    for owner in sorted(initial_hidden):
+        if owner in interactives.replacements or roots.get((owner, 1)):
+            raise FormatError("mode-hidden actor has an unsupported initial focus graph")
+        # Keep mode-hidden resources available for later MeshAnim/ActOn use.
+        # Native mode3 creates RestoreNode(kind19): unlike DeadNode(kind6),
+        # it accepts a later factory replacement. Focus entry runs this only
+        # when no node exists. The leave latch preserves the hidden owner
+        # instead of letting native default cleanup restore its static flags.
+        roots[owner, 1] = [(2, [(0, instance_rid(owner), 1), (1, 3, 1)])]
+        roots.setdefault((owner, 3), [])
     # Do not schedule loops consisting only of unimplemented sounds/emitters.
     # Keep every continuation which reaches a supported action, including
     # through other continuations; remove only code with no native consumer.
@@ -735,6 +781,7 @@ def pack_object_scripts(ssf, pbd, models, collision, instances, source_to_instan
             "source_counter_configs": [[owner, *config] for owner, config in sorted(counters.items())],
             "source_roller_instances": sorted(rollers),
             "source_initial_debounce_instances": sorted(initial_debounce),
+            "source_initial_restore_instances": sorted(initial_hidden),
             "source_cracked_nodes": sorted(cracked_nodes),
             "source_cracked_configs": [[owner, *config] for owner, config in sorted(cracked_configs.items())],
             "source_pop_burst_nodes": sorted(pop_bursts),
