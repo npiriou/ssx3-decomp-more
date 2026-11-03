@@ -85,7 +85,8 @@ class NativeInteractives:
               "post": ("ARA1", 1415), "score2": ("ASS1", 2023),
               "score3": ("ASS1", 976), "score5": ("ASS1", 2249)}
 
-    def __init__(self, ssb, streams, locations, source_map, pbd, models, instances):
+    def __init__(self, ssb, streams, locations, source_map, pbd, models, instances,
+                 source_pickups=None):
         self.resources = {}
         for bank in sorted({bank for bank, _ in self.DONORS.values()}):
             location = next(item for item in locations if item["name"] == bank)
@@ -107,7 +108,9 @@ class NativeInteractives:
         source_ids = set(instances)
         for index in instances:
             name = self.names.get(index, "")
-            if name.startswith("Mdl_SpeedBoost_"):
+            if source_pickups and index in source_pickups:
+                self.replacements[index] = source_pickups[index]
+            elif name.startswith("Mdl_SpeedBoost_"):
                 self.replacements[index] = "speed"
             elif name.startswith("Mdl_TrickBoost_"):
                 self.replacements[index] = "trick"

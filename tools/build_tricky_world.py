@@ -35,7 +35,7 @@ from tricky_ssh import inspect_world_ssh, parse_shps, to_world_ssh
 from tricky_courses import Course, course
 from ssx3_tricky_sky import import_sky
 from tricky_gameplay import pack_gameplay
-from tricky_object_effects import pack_object_scripts
+from tricky_object_effects import pack_object_scripts, source_pickups
 from tricky_race_settings import showoff_catalog
 
 
@@ -121,7 +121,8 @@ def build(SSX3_iso: Path, tricky_iso: Path, output: Path, *,
     interactives = NativeInteractives(
         ssb, streams, locations,
         read_cofb_member(tricky_archive, f"data/models/{stem}.map"),
-        pbd, models, race_instances)
+        pbd, models, race_instances,
+        source_pickups(ssf_data, collision_data, race_instances))
     # Follow Race scenery dependencies before assigning native IDs. Compact
     # local tables avoid sparse slots that native resource loops can visit.
     source_models = {pbd["instances"][index]["model_id"] for index in race_instances

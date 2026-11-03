@@ -1701,6 +1701,8 @@ pub(crate) fn box_pair(c: &mut Cpu, x: u32, y: u32, first_lt: bool) -> bool {
 /// flag 0x20 use their node box, objects with flag 0x40 ask their object
 /// (`vt[44]` "should test", `vt[45]` box).
 pub fn overlap_list_collide_objects(c: &mut Cpu) {
+    crate::custom_contact_trace::query(c, c.g[A0][0] as u32, c.g[A1][0] as u32,
+        if c.g[T0][0] == 0 { 1 } else { 2 });
     guest(c, |c| {
         c.cycles += 21;
         let frame = Frame::open(c, 0x90);
@@ -1840,7 +1842,9 @@ pub fn overlap_list_collide_objects(c: &mut Cpu) {
                     c.g[A2][0] = sx((c.g[S6][0] as u32).wrapping_add((c.g[A2][0] as u32)));
                     c.g[A0][0] = c.g[S1][0];
                     c.g[T0][0] = c.g[S7][0];
+                    crate::custom_contact_trace::candidate(c, c.g[S0][0] as u32, c.g[S7][0] as u32, None);
                     callee::COLLIDE_VOLUME_OBJECT_2.call(c, 0x0033_4638)?;
+                    crate::custom_contact_trace::candidate(c, c.g[S0][0] as u32, c.g[S7][0] as u32, Some(c.g[V0][0] as u32));
                     c.g[S2][0] = sx((c.g[S2][0] as u32).wrapping_add((c.g[V0][0] as u32)));
                 }
                 if !short {

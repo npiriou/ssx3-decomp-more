@@ -42,6 +42,39 @@ def read_logic(data: bytes) -> tuple[list[tuple], list[list[dict]], list[dict]]:
     return slots, effects, functions
 
 
+def source_pickups(ssf, collision, instances):
+    """Recognize visible pickup actors by their authored contact effect.
+
+    Aloha even spells two model names `TrickB00st`. Display/model names are
+    not the gameplay contract: Main17/18 grant speed/trick, Main14 a multiplier.
+    """
+    slots, chains, _ = read_logic(ssf)
+    pickups = {}
+    for owner in instances:
+        prop = collision["properties"][collision["instance_properties"][owner]]
+        slot = prop["effect_slot"]
+        if slot < 0 or not prop["flags"] & 1:
+            continue
+        chain = slots[slot][1]
+        if chain < 0:
+            continue
+        kinds = set()
+        for node in chains[chain]:
+            if node["main"] == 17:
+                kinds.add("speed")
+            elif node["main"] == 18:
+                kinds.add("trick")
+            elif node["main"] == 14:
+                multiplier = struct.unpack("<f", struct.pack("<I", node["words"][0]))[0]
+                if multiplier in (2, 3, 5):
+                    kinds.add(f"score{int(multiplier)}")
+        if len(kinds) > 1:
+            raise FormatError("Tricky pickup combines incompatible native rewards")
+        if kinds:
+            pickups[owner] = kinds.pop()
+    return pickups
+
+
 def pack_object_scripts(ssf, pbd, models, collision, instances, source_to_instance,
                            interactives, section, mode):
     slots, chains, functions = read_logic(ssf)
@@ -60,6 +93,7 @@ def pack_object_scripts(ssf, pbd, models, collision, instances, source_to_instan
     task_ids = {}
     waits = set()
     invisible_tombstones = set()
+    tombstones = set()
     rail_switches = set()
 
     # Mode setup runs before play in Tricky. Bake its unconditional rail
@@ -191,12 +225,14 @@ def pack_object_scripts(ssf, pbd, models, collision, instances, source_to_instan
                 hidden.add(owner)
             elif main == 0 and words[0] == 5 and words[1] == 2:
                 prop = collision["properties"][collision["instance_properties"][owner]]
+                # An ordinary source tombstone removes the host's drawing and
+                # player contacts until restart. Native DeadNode owns this
+                # lifecycle for visible panes as well as invisible triggers.
+                # Detached spline-copy ownership is a separate source node;
+                # it must not be attached to this host's native dead actor.
+                commands.append((2, [(0, instance_rid(owner), 1), (1, 0, 1)]))
+                tombstones.add(owner)
                 if not prop["flags"] & 1:
-                    # Invisible one-shot triggers (e.g. Mesa's tree switch)
-                    # need no drawing-node policy: disable their contacts with
-                    # the native persistent DeadNode. Visible tombstones and
-                    # detached mover ownership remain separate work.
-                    commands.append((2, [(0, instance_rid(owner), 1), (1, 0, 1)]))
                     invisible_tombstones.add(owner)
             elif main == 0 and words[0] == 20:
                 model = models[pbd["instances"][owner]["model_id"]]
@@ -375,6 +411,7 @@ def pack_object_scripts(ssf, pbd, models, collision, instances, source_to_instan
             "native_deferred_functions": len(live_tasks),
             "source_wait_nodes": sorted(waits),
             "source_invisible_tombstones": sorted(invisible_tombstones),
+            "source_tombstones": sorted(tombstones),
             "source_initial_rail_states": initial_rails,
             "source_scripted_rail_switches": sorted(rail_switches),
             "source_animated_instances": sorted({owner for owner, _ in records})}

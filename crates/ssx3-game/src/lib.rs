@@ -32,6 +32,7 @@ pub mod custom_tracks;
 pub mod custom_course_rules;
 pub mod custom_script_effects;
 pub mod custom_script_queue;
+mod custom_contact_trace;
 pub mod custom_rail_rules;
 pub mod custom_script_manager_update;
 pub mod custom_anim_object_factory;
