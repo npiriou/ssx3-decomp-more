@@ -1,5 +1,6 @@
-//! Exact native Rider_SnapToNearestAIPath0x112d58, retained uninstalled.
-//! No tests, builds, replays or game runs were added or executed.
+//! Native Rider_SnapToNearestAIPath0x112d58 with imported Tricky query policy.
+//! Retail courses keep the generated body. Automated tests/replays are
+//! disabled by the user's development instructions.
 
 use crate::call::{call_ptr, guest, Frame};
 use crate::events::{deliver_event_here, event_due};
@@ -26,7 +27,6 @@ const SCORE: u32 = 0x0011_2e2c;
 const NEXT: u32 = 0x0011_2ee0;
 const HAVE_PATH: u32 = 0x0011_2eec;
 const RESTORE: u32 = 0x0011_2f7c;
-const POSITION: u32 = 0x110;
 const AI_PATH: u32 = 0xab8;
 const AI_CURSOR: u32 = 0xabc;
 const RESET_POSITION: u32 = 0x490;
@@ -47,14 +47,18 @@ fn squared_distance(c: &mut Cpu, vector: u32, register: usize, fpr: usize) {
     c.mtc1(register, fpr);
 }
 
-/// Select among at most six near AI paths, scoring the current projection
-/// and its point796cm farther along. When rider-interface slot+0x40 returns
-/// zero, candidates within200cm of their path end are skipped. Resolve the
+/// Select among at most six recoverable AI paths, scoring the route-seeded
+/// projection and its point800cm farther along. Like Tricky118c08, skip
+/// candidates within200cm of their path end for every rider. Resolve the
 /// chosen projection through the native
 /// path marker-boundary helper, retaining its distance/cursor and two reset
 /// positions. Candidate eligibility is delegated to FindNearAIPaths; this
 /// wrapper does not read the serialized respawnable word itself.
 pub fn rider_snap_to_nearest_ai_path(c: &mut Cpu) {
+    if crate::custom_tracks::active().is_none() {
+        ssx3_ee::s00::f_00112d58__generated(c);
+        return;
+    }
     guest(c, |c| {
         let frame = Frame { size: 0x100 };
         let mut pc = c.pc;
@@ -67,13 +71,14 @@ pub fn rider_snap_to_nearest_ai_path(c: &mut Cpu) {
                     frame.save(c, S1, 0xb0);
                     c.g[A2][0] = c.g[SP][0];
                     c.g[S1][0] = c.g[A0][0];
+                    crate::custom_tricky_recovery::seed_query(c, r(c, S1));
                     frame.save(c, S2, 0xa0);
                     c.g[A0][0] = 0x004d_0000;
                     frame.save_fpr(c, 22, 0xe0);
                     frame.save(c, S0, 0xc0);
                     c.g[A0][0] = sx(at(c, A0, 0x33a0));
                     frame.save(c, S3, 0x90);
-                    c.g[A1][0] = sx(at(c, S1, POSITION));
+                    c.g[A1][0] = sx(crate::custom_tricky_recovery::query_position(r(c, S1)));
                     frame.save(c, S4, 0x80);
                     c.g[S2][0] = 0;
                     frame.save_ra(c, 0x70);
@@ -95,7 +100,7 @@ pub fn rider_snap_to_nearest_ai_path(c: &mut Cpu) {
                         c.g[AT][0] = 0x4348_0000;
                         c.mtc1(AT, 24);
                         c.g[S3][0] = c.g[V0][0];
-                        c.g[AT][0] = 0x4447_0000;
+                        c.g[AT][0] = crate::custom_tricky_recovery::ahead_bits() as u64;
                         c.mtc1(AT, 23);
                         c.g[S4][0] = sx(at(c, S1, 0x6c0));
                         c.g[S0][0] = c.g[SP][0];
@@ -105,7 +110,7 @@ pub fn rider_snap_to_nearest_ai_path(c: &mut Cpu) {
                 CANDIDATE => {
                     c.cycles += 17;
                     c.g[A0][0] = c.lw(r(c, S0));
-                    c.g[A1][0] = sx(at(c, S1, POSITION));
+                    c.g[A1][0] = sx(crate::custom_tricky_recovery::query_position(r(c, S1)));
                     c.g[A2][0] = sx(at(c, SP, 0x20));
                     c.g[A3][0] = sx(at(c, SP, 0x60));
                     c.g[RA][0] = sx(0x0011_2de8);
@@ -132,7 +137,7 @@ pub fn rider_snap_to_nearest_ai_path(c: &mut Cpu) {
                     pc = 0x0011_2e0c;
                 }
                 0x0011_2e0c => {
-                    if c.g[V0][0] != 0 {
+                    if c.g[V0][0] != 0 && crate::custom_tracks::active().is_none() {
                         c.add_s(0, 21, 23);
                         pc = SCORE;
                     } else {
@@ -160,13 +165,13 @@ pub fn rider_snap_to_nearest_ai_path(c: &mut Cpu) {
                     pc = 0x0011_2e40;
                 }
                 0x0011_2e40 => {
-                    c.lqc2(3, at(c, S1, POSITION));
+                    c.lqc2(3, crate::custom_tricky_recovery::query_position(r(c, S1)));
                     c.lqc2(4, at(c, SP, 0x40));
                     c.vu0().sub(0b1111, 5, 3, Src::Vec(4));
                     c.sqc2(5, at(c, SP, 0x50));
                     c.lq(V0, at(c, SP, 0x50));
                     c.sq(V0, at(c, SP, 0x30));
-                    c.lqc2(3, at(c, S1, POSITION));
+                    c.lqc2(3, crate::custom_tricky_recovery::query_position(r(c, S1)));
                     c.lqc2(4, at(c, SP, 0x20));
                     c.vu0().sub(0b1111, 5, 3, Src::Vec(4));
                     c.sqc2(5, at(c, SP, 0x50));
@@ -216,7 +221,7 @@ pub fn rider_snap_to_nearest_ai_path(c: &mut Cpu) {
                         c.g[A3][0] = sx(at(c, S1, 0x4c8));
                         c.g[T1][0] = 1;
                         c.sw(at(c, V1, 0x14), c.g[V0][0]);
-                        c.g[A1][0] = sx(at(c, S1, POSITION));
+                        c.g[A1][0] = sx(crate::custom_tricky_recovery::query_position(r(c, S1)));
                         c.g[A2][0] = sx(at(c, S1, RESET_POSITION));
                         c.g[T0][0] = c.lw(at(c, S1, AI_CURSOR));
                         c.g[RA][0] = sx(0x0011_2f24);
@@ -238,7 +243,7 @@ pub fn rider_snap_to_nearest_ai_path(c: &mut Cpu) {
                 0x0011_2f3c => {
                     c.lwc1(0, at(c, S1, AI_DISTANCE));
                     c.g[A0][0] = c.g[S0][0];
-                    c.g[AT][0] = 0x4447_0000;
+                    c.g[AT][0] = crate::custom_tricky_recovery::ahead_bits() as u64;
                     c.mtc1(AT, 1);
                     c.g[A2][0] = sx(at(c, SP, 0x68));
                     c.lq(V0, at(c, SP, 0x30));

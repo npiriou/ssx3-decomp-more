@@ -5467,3 +5467,4 @@
 0x00309270    WScriptMan_Update
 0x001086b8    Rider_ProbeRail
 0x0020a8f8    GameUI_OpenScreenForState
+0x00112d58    Rider_SnapToNearestAIPath

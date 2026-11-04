@@ -1859,11 +1859,12 @@ pub(crate) fn accumulate_kid(c: &mut Cpu, kid: u32, mn: u32, mx: u32) {
 // CollSegment_ctor.
 
 /// `CollSegment* CollSegment_ctor(CollSegment* seg, const Vec4* p0,
-/// const Vec4* p1, int state, float r)` (0x32e100): a capsule: the state and
+/// const Vec4* p1, int state, float reference)` (0x32e100): the state and
 /// vtable (`0x48e6a8`), the start point `p0` (raw and as the base), the
-/// direction `p1 - p0`, the radius, the AABB of the two points and its
+/// direction `p1 - p0`, the preferred contact fraction, the AABB and its
 /// centre.
 pub fn coll_segment_ctor(c: &mut Cpu) {
+    crate::custom_tricky_recovery::prepare_ground_query(c);
     c.cycles += 26;
     let seg = r32(c, A0);
     c.g[T0][0] = c.g[A0][0];
@@ -1884,7 +1885,7 @@ pub fn coll_segment_ctor(c: &mut Cpu) {
     c.vu0().sub(0b1111, 5, 3, Src::Vec(4));
     c.sqc2(5, sp.wrapping_add(0x10));
     c.lq(2, sp.wrapping_add(0x10));
-    c.swc1(12, seg.wrapping_add(0xa0)); // radius
+    c.swc1(12, seg.wrapping_add(0xa0)); // Nash contact-reference fraction
     c.sq(2, seg.wrapping_add(0x70)); // dirb
     c.sq(2, seg.wrapping_add(0x90)); // dir
     c.sq(2, sp);

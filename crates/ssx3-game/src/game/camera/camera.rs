@@ -4537,13 +4537,15 @@ const CAM_SCRIPT_RESET: u32 = 0x4a4;
 /// its distance from the look-at point, and the lift decays by
 /// `gp-0x6c54` (0.97) per update.
 ///
-/// With a script camera active (the controller at +0xa8), a segment from
-/// the eye to 100 above the look-at point is tested too: on a hit the eye
+/// With a script camera active in the chase controller (+0xa8), a segment
+/// from100 above the look-at point to the eye is tested too: on a hit the eye
 /// goes back to the last clear one (+0x490) or, when +0x4a4 is set, to
 /// 180 above and beside the look-at point; on the first blocked update it
 /// moves 50 along the contact normal; when it ends up within 2 of the
 /// look-at point or (nearly) straight above it, it is reset to 150 up and
 /// 100 to the side. The eye is saved at +0x490 and +0x4a4 cleared.
+/// Imported ordinary chase views also use this query, retracting the eye
+/// to the rider's side of the first obstruction with the native50cm margin.
 ///
 /// Frame 0x400: the vector scratch at +0x00..+0x360 (the contact records
 /// at +0x00 and +0x2a0, the segments at +0x110 and +0x1f0), `ra` at +0x370,
@@ -4694,11 +4696,12 @@ pub fn game_camera_avoid_collision(c: &mut Cpu) {
         }
         .call(c, 0x0015_f2a0)?;
         c.g[S0][0] = sx(sp_at(c, 0x1f0));
-        if c.g[V0][0] == 0 {
+        let chase_obstruction = c.g[V0][0] == 0 && imported_chase_camera(c, cam);
+        if c.g[V0][0] == 0 && !chase_obstruction {
             c.cycles += 1;
             c.sw(cam + CAM_SCRIPT_BLOCKED, 0);
         } else {
-            avoid_collision_script(c, cam)?;
+            avoid_collision_script(c, cam, chase_obstruction)?;
         }
 
         // Block 0x15f52c.
@@ -4785,13 +4788,24 @@ fn avoid_collision_correct_lift(c: &mut Cpu, cam: u32) {
     c.lwc1(0, cam + CAM_LIFT);
 }
 
-/// [`game_camera_avoid_collision`] with a script camera active (blocks
-/// 0x15f2b0..0x15f528): keep the eye clear of the line to the look-at point.
-fn avoid_collision_script(c: &mut Cpu, cam: u32) -> Flow {
+/// Active chase controller on an imported course. The caller separately
+/// checks the native script-camera predicate before enabling this policy.
+fn imported_chase_camera(c: &mut Cpu, cam: u32) -> bool {
+    if crate::custom_tracks::active().is_none() { return false }
+    let chase = c.bus.read32(cam + 0xa8);
+    chase != 0 && c.bus.read32(cam + 0xa0) == chase
+}
+
+/// [`game_camera_avoid_collision`]'s line-of-sight query (blocks
+/// 0x15f2b0..0x15f528), also used by imported ordinary chase views.
+fn avoid_collision_script(c: &mut Cpu, cam: u32, chase_obstruction: bool) -> Flow {
     c.cycles += 36;
     fconst(c, 0, 0x42c8_0000); // 100
     vscale_q(c, V0, 0, AVOID_UP, sp_at(c, 0x1e0));
-    fconst(c, 12, 0x3f00_0000);
+    // Chase views need the obstruction nearest the rider-side endpoint,
+    // so multiple stacked platforms cannot leave a nearer obstruction
+    // between the corrected eye and the rider. Cinematics retain0.5.
+    fconst(c, 12, if chase_obstruction { 0 } else { 0x3f00_0000 });
     c.lq(2, sp_at(c, 0x1e0));
     c.g[A2][0] = sx(sp_at(c, 0x1d0));
     c.g[A1][0] = c.g[S4][0];
@@ -4811,6 +4825,38 @@ fn avoid_collision_script(c: &mut Cpu, cam: u32) -> Flow {
     c.g[V0][0] = c.lw(r32(c, V1).wrapping_add(0x84));
     c.g[A0][0] = c.lw(r32(c, V0).wrapping_add(0x20));
     call_ptr(c, NASH_FIND_CLOSEST_CONTACT, 0x0015_f324)?;
+    if chase_obstruction {
+        let fraction = f32::from_bits(c.f[0]);
+        if (0. ..=1.).contains(&fraction) {
+            let eye: [f32; 3] = std::array::from_fn(|i|
+                f32::from_bits(c.bus.read32(cam + CAM_EYE + i as u32 * 4)));
+            let mut target: [f32; 3] = std::array::from_fn(|i|
+                f32::from_bits(c.bus.read32(cam + CAM_LOOK_AT + i as u32 * 4)));
+            target[2] += 100.; // Same rider-side endpoint as the native query.
+            // Native A1 is the elevated look-at point, A2 the desired eye:
+            // cast from the rider towards the camera (also respects floors
+            // whose collision is one-sided from above).
+            let delta: [f32; 3] = std::array::from_fn(|i| eye[i] - target[i]);
+            let length = delta.iter().map(|v| v * v).sum::<f32>().sqrt();
+            if length.is_finite() && length > 0. {
+                // The native avoidance margin is50cm. Pull along this
+                // sight line onto the rider's side, rather than accepting
+                // free space underneath a thin elevated floor or freezing
+                // at a previous camera position.
+                let t = (fraction - 50. / length).max(0.);
+                for axis in 0..3 {
+                    c.bus.write32(cam + CAM_EYE + axis * 4,
+                        (target[axis as usize] + delta[axis as usize] * t).to_bits());
+                }
+            }
+        }
+        for axis in 0..4 {
+            let value = c.bus.read32(cam + CAM_EYE + axis * 4);
+            c.bus.write32(cam + CAM_SCRIPT_EYE + axis * 4, value);
+        }
+        c.sw(cam + CAM_SCRIPT_BLOCKED, 0);
+        return Ok(());
+    }
     c.mtc1(0, 1);
     c.c_lt_s(1, 0);
     // Whether the closing `lq v0, eye` is still to come (+1 cycle).
