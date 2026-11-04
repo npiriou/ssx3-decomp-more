@@ -40,6 +40,43 @@ def _split_mesh(mesh: dict) -> list[dict]:
     return result
 
 
+def collision_only_parts(pbd: dict, models: list[dict], source: dict,
+                         instances: list[int], mesh_counts: dict[int, int]) -> dict[int, int]:
+    """Supply model parts for collision chunks beyond the source byte-index limit.
+
+    Collide_VolumeObject consumes one collision mesh per non-null MDR geometry
+    part, even when that part has no draw groups. More property records alone
+    do not make it visit the additional meshes.
+    """
+    bindings = {}
+    extra = {}
+    for instance_id in instances:
+        model_id = pbd["instances"][instance_id]["model_id"]
+        prop = source["properties"][source["instance_properties"][instance_id]]
+        mode, index = prop["collision_mode"], prop["collision_index"]
+        bindings.setdefault(model_id, set()).add((mode, index))
+        if mode != 1 or index < 0:
+            continue
+        source_count = len(source["collisions"][index]["meshes"])
+        count = mesh_counts[index]
+        if count <= source_count:
+            continue
+        # Every affected supplied prefab is one static root with one source
+        # collision mesh. Preserve that root and append draw-free siblings.
+        # A multi-part/animated prefab needs an explicit part/chunk mapping.
+        objects = models[model_id]["objects"]
+        if (source_count != 1 or len(objects) != 1 or
+                objects[0].get("animation") is not None or
+                objects[0]["parent"] != 0xffffffff or not objects[0]["meshes"]):
+            raise FormatError("split collision needs an explicit model-part mapping")
+        extra[model_id] = count - 1
+    for model_id, additional in extra.items():
+        for mode, index in bindings[model_id]:
+            if mode != 1 or index < 0 or mesh_counts[index] != additional + 1:
+                raise FormatError("shared model has incompatible split collision bindings")
+    return extra
+
+
 def pack_collision(collision: dict) -> bytes:
     """Preserve every face, splitting only to fit unsigned byte indices."""
     meshes = [part for mesh in collision["meshes"] for part in _split_mesh(mesh)]

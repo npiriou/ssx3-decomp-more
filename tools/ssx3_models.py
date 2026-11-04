@@ -137,9 +137,20 @@ def _pack_animation(out: bytearray, animation: dict) -> int:
 
 
 def pack_model(model: dict, section_id: int, *, resource_id: int | None = None,
-               material_rids: dict[int, int] | None = None) -> tuple[bytes, list[dict]]:
+               material_rids: dict[int, int] | None = None,
+               collision_copies: int = 0) -> tuple[bytes, list[dict]]:
     """Return a type-2 payload and its group/batch layout for instances."""
     objects = model["objects"]
+    if collision_copies:
+        if (collision_copies < 0 or len(objects) != 1 or
+                objects[0].get("animation") is not None or
+                objects[0]["parent"] != 0xffffffff):
+            raise FormatError("collision-only copies require one static model root")
+        # Keep the same root transform/bounds. A non-null geometry header lets
+        # native collision consume the next mesh; zero draw groups make the
+        # native renderer skip it without duplicating visible geometry/DMA.
+        objects = [*objects, *(dict(objects[0], meshes=[], collision_only=True)
+                              for _ in range(collision_copies))]
     materials = sorted({mesh["material"] for part in objects for mesh in part["meshes"]})
     material_indices = {material: index for index, material in enumerate(materials)}
     object_table = 44 + len(materials) * 4
@@ -150,7 +161,7 @@ def pack_model(model: dict, section_id: int, *, resource_id: int | None = None,
     groups = []
     for index, part in enumerate(objects):
         geometry = 0
-        if part["meshes"]:
+        if part["meshes"] or part.get("collision_only"):
             geometry = len(out)
             count = len(part["meshes"])
             pointer_table = geometry + 36

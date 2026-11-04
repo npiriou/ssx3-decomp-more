@@ -16,7 +16,7 @@ from pathlib import Path
 import struct
 
 from ssx3_aip import convert_tricky_aip, inspect_world_aip
-from ssx3_collision import pack_collision, pack_sphere_tree
+from ssx3_collision import collision_only_parts, pack_collision, pack_sphere_tree
 from ssx3_interactives import NativeInteractives
 from ssx3_models import pack_instance, pack_model
 from ssx3_splines import convert_splines, spline_template
@@ -239,22 +239,28 @@ def build(SSX3_iso: Path, tricky_iso: Path, output: Path, *,
                                pbd["texture_flipbooks"][material["texture_flipbook_id"]]]
                               if material["texture_flipbook_id"] >= 0 else ()),
         ))
+    collision_payloads = {collision["index"]: pack_collision(collision)
+                          for collision in collision_data["collisions"]}
+    mesh_counts = {index: struct.unpack_from("<H", payload, 2)[0]
+                   for index, payload in collision_payloads.items()}
+    collision_copies = collision_only_parts(
+        pbd, models, collision_data,
+        [index for index in race_instances if index not in interactives.replacements],
+        mesh_counts)
     model_layouts = {}
     for model in models:
         if model["index"] not in model_ids:
             continue
         rid = model_ids[model["index"]]
         payload, layout = pack_model(model, section_id, resource_id=rid,
-                                     material_rids=material_ids)
+                                     material_rids=material_ids,
+                                     collision_copies=collision_copies.get(model["index"], 0))
         shared.extend(pack_resource(2, section_id, rid, payload))
         model_layouts[model["index"]] = layout
     for kind, rid, payload in interactives.records():
         shared.extend(pack_resource(kind, section_id, rid, payload))
-    mesh_counts = {}
-    for collision in collision_data["collisions"]:
-        payload = pack_collision(collision)
-        mesh_counts[collision["index"]] = struct.unpack_from("<H", payload, 2)[0]
-        shared.extend(pack_resource(12, section_id, collision["index"], payload))
+    for index, payload in collision_payloads.items():
+        shared.extend(pack_resource(12, section_id, index, payload))
     physics_base = len(collision_data["collisions"])
     for physics in collision_data["physics"]:
         shared.extend(pack_resource(12, section_id, physics_base + physics["index"],
@@ -405,6 +411,7 @@ def build(SSX3_iso: Path, tricky_iso: Path, output: Path, *,
         "model_count": len(model_ids) + len(interactives.model_ids),
         "material_count": len(material_ids) + len(interactives.material_ids),
         "source_model_count": len(models),
+        "native_collision_only_parts": collision_copies,
         "native_animation_base_pose_ranges": sum(
             bool(channel and channel[0][4] > 0)
             for model in models if model["index"] in model_ids
