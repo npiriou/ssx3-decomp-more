@@ -54,3 +54,43 @@ barrier still need to be established before importing prop-to-prop dispatch.
 This is source/integration evidence, not a claim that Mesa's wall contacts,
 cart travel, intermittent glass, or the reported rider bounce are resolved.
 No game/window operation, automated test, replay, gate or browser build occurred.
+
+## Follow-up source/current-resource inspection (v60)
+
+The source Roller vtable36d790 selects13e8a8 at+10 and13f9f8 at+18.
+The latter is a drawing path: it checks the instance's visible bit, queries
+graphics visibility, builds matrices, then calls graphics1ce140/1ce310 and
+200680. It does not establish a missing physics post-update loop. Source
+helpers13e140/13e6a0 contain state/vector/quaternion arithmetic, rather than
+the previously hypothesized primitive-candidate traversal. Source Update
+still reaches13eda8 at13ed00. A fresh direct-call inventory again finds no
+J/JAL caller of13f330 or13f5c8. That is not a universal proof of dead code,
+but it supplies no scheduling contract for a new prop-overlap scan.
+
+Source model173 has an animated part2 under parent1, mask63, with authored
+channels spanning0..3s. Its raw local translation changes from approximately
+[-1.20,-0.05,-1.46]cm at0 to[7046.78,591.22,-3100.30]cm at3s.
+These are source part translations; the inventory does not execute the native
+animation or claim a complete hierarchical world pose. They support retaining
+the authored3s animation/physical-cart handoff rather than inventing a longer
+wait or faster cart. The source physical cart907 remains at its distinct
+authored instance position[72505.80,15840.83,-49889.23]cm.
+
+All14 source `Mdl_HoleCoverWood` owners are present in both current prepared
+Mesa BAMs. Their actual per-part contact flags are2: notifications retained,
+bounce bit0 cleared. They belong to the39 previously identified unconditional
+Mesa break-through owners. Their contact graphs are retained in the inventory.
+This confirms that the user's earlier wooden-cover bounce report is already
+addressed by the exported policy; it does not prove that a current physical
+contact selects that property, breaks the cover or avoids every possible
+obstacle response. No additional collision/physics change is justified by
+these serialized observations alone.
+
+Evidence: `.cache/cart-assets-v60-inspection.json`,
+`.cache/inspect-cart-assets-v60.log`, `.cache/inspect-cart-dispatch-v60.log`
+and `.cache/tricky-cart-*-v60.disasm.txt`. The source decoder labels EE
+LQ/SQ/LQC2/SQC2 explicitly and leaves VU/MMI words raw, avoiding Capstone's
+unrelated MIPS64 branch interpretations. No source/native body is executed.
+No runtime code or asset changes are made in this pass; the v59 native build
+and v56 prepared assets remain current. The actual handoff, wall passage and
+source prop-dispatch correspondence still lack a current gameplay observation.
