@@ -419,6 +419,7 @@ pub fn ea_mem_free(c: &mut Cpu) {
 /// (`MEM_HeapFree(&heap, p)`).
 pub fn mem_free_internal(c: &mut Cpu) {
     guest(c, |c| {
+        let heap_trace = crate::custom_heap_diagnostics::begin(c, "free");
         c.cycles += 5;
         let frame = Frame::open(c, 0x20);
         frame.save(c, S0, 0x10);
@@ -441,9 +442,11 @@ pub fn mem_free_internal(c: &mut Cpu) {
                 return Ok(());
             }
             c.cycles += 3;
+            crate::custom_heap_diagnostics::freeing(c, heap_trace.as_ref(), p as u32);
             c.g[A1][0] = p;
             c.g[A0][0] = MEM_HEAP as u64;
             callee::MEM_HEAP_FREE.call(c, 0x0031_9b88)?;
+            crate::custom_heap_diagnostics::freed(c, heap_trace.as_ref(), p as u32);
         }
         c.cycles += 1;
         frame.restore(c, S0, 0x10);
@@ -461,6 +464,7 @@ pub fn mem_free_internal(c: &mut Cpu) {
 /// asks for zeroed memory (`EA_MemZero`). Returns the block.
 pub fn mem_alloc_internal(c: &mut Cpu) {
     guest(c, |c| {
+        let heap_trace = crate::custom_heap_diagnostics::begin(c, "alloc");
         c.cycles += 8;
         let frame = Frame::open(c, 0x40);
         frame.save(c, S1, 0x20);
@@ -515,6 +519,7 @@ pub fn mem_alloc_internal(c: &mut Cpu) {
         }
         let block = c.g[V0][0];
         c.g[S0][0] = block;
+        crate::custom_heap_diagnostics::allocated(c, heap_trace.as_ref(), block as u32, pooled);
 
         c.cycles += 2;
         if block != 0 && (flags as i64) >= 0 {

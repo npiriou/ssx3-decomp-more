@@ -52,6 +52,7 @@ mod custom_tricky_rail_probe;
 mod custom_tricky_recovery;
 mod custom_snap_ai;
 mod custom_finish_trace;
+mod custom_heap_diagnostics;
 mod custom_audio_banks;
 mod custom_contact_trace;
 pub mod custom_rail_rules;

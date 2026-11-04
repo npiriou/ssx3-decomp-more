@@ -32,6 +32,7 @@ configuration. The plain command above is the recommended way to play.
 | `SSX3_DEBUG_START=x,y,z,dx,dy,dz,aiPath,racePath` | With a custom course: replace only the player's in-memory start marker for windowed development near a mechanic. Coordinates are centimetres, followed by facing and valid AI/race path indices. Does not modify prepared archives or ordinary launches. |
 | `SSX3_TRACE_OBJECT_VOLUME=<hex RID>` | Bounded native overlap/candidate observations for one resident custom-course instance. Records query bounds, candidate membership and contact counts; does not alter collisions. |
 | `SSX3_DEBUG_SNAPSHOT=<directory>` | F8 saves native RAM/register snapshots for inspection. A fatal stop also saves `halt-ram.bin` and `halt-state.txt`, before the faulting thread yields. |
+| `SSX3_HEAP_TRACE=1` | With converted assets available, observe the native memory API. Keep256 recent operations, two rolling4MiB journals and bounded partial allocation ownership; save the first invalid main-heap list/header and RAM under `.cache/diagnostics/heap-*`. Does not change allocation/free behavior, repair lists, run inputs or replay the game. |
 
 **Rendering.** By default the game's frames are drawn by the native renderer
 (`crates/ssx3-gfx`, wgpu). The frame's DMA chains are not run through the emulated
