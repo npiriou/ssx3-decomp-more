@@ -196,6 +196,12 @@ pub fn track_info() -> Option<u32> {
     (pointer != 0).then_some(pointer)
 }
 
+/// Whether a compact world-resource ID belongs to the active imported section.
+pub(crate) fn owns_world_resource(rid: u32) -> bool {
+    let section = ACTIVE_WORLD_SECTION.load(Ordering::Acquire);
+    active().is_some() && section != u32::MAX && rid & 255 == section
+}
+
 pub fn set_assets_available(available: bool) {
     ASSETS_AVAILABLE.store(available, Ordering::Release);
 }

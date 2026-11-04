@@ -101,3 +101,57 @@ version. Native compilation succeeds in1m24s in
 `.cache/build-tricky-rail-approach-v59-final.log`. The earlier v59 build
 predates the final observation wrapper and is not the current binary.
 No automated tests, replay gates or browser build are run.
+
+## Source board-contact volume (v61)
+
+The previous inventory established that resources existed, not that their
+contact volume matched Tricky. A further read-only traversal of all four
+saved spatial trees now checks each segment's bounds against every ancestor
+cell, using the actual native0.2-cell margins and X/Y/Z octant ordering.
+All213 Alaska and442 Elysium segments fit their complete ancestry in both
+snapshots. Evidence: `.cache/rail-cells-v61-inspection.json`. This supplies
+no justification for moving curves or expanding their spatial bounds.
+
+The source rider's rail-entry routine is125cb8..126250. It queries the
+rail using the board matrix at rider+4a60, then tests the closest point
+in that matrix's oriented box. At125dd0..125e28 it computes
+`delta = hit - board_origin - 30 * board_Y`. Thus the box center is
+`board_origin + 30 * board_Y`, not minus30. Its final contracted half-extents
+at125ef0..125fcc are:
+
+- forward: `0.9 * (150 * blend + 80 * (1-blend))`cm;
+- board normal: `0.9 * 50`cm;
+- across the board: `0.9 * (50 * blend + 30 * (1-blend))`cm.
+
+Native SSX3 ProbeRail1086b8 instead uses an unshifted forward capsule with
+radius30..50cm and its native axial interval. The volumes are different;
+at blend1, Tricky's normal interval is[-15,+75]cm relative to the board,
+whereas the native capsule reaches50cm in that direction. Retaining only
+the native capsule discards source-supported entry positions. The source
+routine, its selected axes, dimensions, shift sign and transition to its
+railslide state are retained in `.cache/tricky-rail-attach-v61.disasm.txt`.
+
+`custom_tricky_rail_probe` wraps the unchanged native ProbeRail. After a
+native miss at FindRail's attach call108c10, it accepts an already-selected
+plain-spline contact inside that source box. It requires an active imported
+section, matching spline RID, active rail flags and valid board pose. No
+additional search, relocated curve, changed broad-phase radius, altered
+retail contact or forced motion state is added. The native state/task/input
+guards, candidate, tangent, stance, speed and actual Railslide entry remain
+in control. The source-box adapter is a compatibility policy for native
+contacts; it is not a bit-exact replacement of Tricky's whole rail query.
+
+The inspected Cruise131620 and NaturalAir12f730 callers are retained as
+uninstalled Rust translations with empty override lists. Neither has an
+imported-course/ice-surface gate around attachment. Cruise prioritizes
+finish/reset/airborne transitions and the handplant input branch;
+NaturalAir prioritizes reset, active-tweak transitions and successful
+handplants. Installing those callers would not address the volume mismatch.
+
+Both generated dispatch forms include the new1086b8 slot. The final native
+build succeeds in1m33s in `.cache/build-tricky-rail-contact-v61-final.log`;
+the first build failed on Rust mutability signatures and is superseded.
+No assets/importer changed: the19 v56 archives remain current. This is an
+installed contact correction, not manual confirmation of Elysium/Alaska's
+reported rails. No automated test, replay, gate, browser build or game/window
+operation is performed.

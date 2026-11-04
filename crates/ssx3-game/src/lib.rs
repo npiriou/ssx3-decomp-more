@@ -48,6 +48,7 @@ mod custom_flags;
 mod custom_spline_movers;
 mod custom_force_overlap;
 mod custom_rail_diagnostics;
+mod custom_tricky_rail_probe;
 mod custom_finish_trace;
 mod custom_audio_banks;
 mod custom_contact_trace;
@@ -229,6 +230,7 @@ pub fn overrides() -> Vec<(u32, GuestFn, &'static str)> {
     v.extend_from_slice(custom_worldscript::OVERRIDES);
     v.extend_from_slice(custom_results::OVERRIDES);
     v.extend_from_slice(custom_finish_dispatch::OVERRIDES);
+    v.extend_from_slice(custom_tricky_rail_probe::OVERRIDES);
     v.extend_from_slice(custom_placement::OVERRIDES);
     v.extend_from_slice(custom_nash_insert::OVERRIDES);
     v.extend_from_slice(custom_resident_check::OVERRIDES);
