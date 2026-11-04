@@ -78,3 +78,30 @@ visual acceptance. Native compilation succeeds in1m32s in
 `.cache/build-tricky-groundmark-observations-v58.log`; the retained
 uninstalled packet writer is not compiled by that build. No automated test,
 replay, gate or browser build is used.
+
+## Native-path follow-up (v65, no runtime correction)
+
+Inspection of the actual ribbon submission confirms that its three mask
+passes use FRAME00ffffff (all RGB channels protected), followed by ordinary
+textured edge passes. The draw planner recognizes that mask as alpha-only,
+and destination-alpha snapshots track alpha-only draws as changed regions.
+The modern decal-lighting path is option-controlled; a default option value
+does not establish the user's current setting. These source facts do not
+justify a texture, palette, blend, mask or lighting change without current
+draw inputs identifying the failing stage.
+
+A separate deferred-script investigation found that generated mid-function
+entry routing can bypass the imported epilogue in unwind execution. However,
+the current native host-thread runtime (`ssx3-ps2/src/threads.rs`) suspends
+stackful coroutines and preserves the actual caller stack across ordinary
+thread switches. That unwind scenario is therefore not established as the
+cause of the user's native intermittent panes. An experimental routing
+annotation/generator change was reverted before any game rebuild, and both
+generated forms were restored from the committed generator. No such routing
+patch is installed or claimed as a native fix.
+
+The executable remains the successful v64 build and resources remain v63.
+No current ssx3 process or diagnostics directory exists at this inspection;
+there is still no failing current groundmark, rail, pane or finish sample.
+Those reports remain unresolved/unconfirmed; no automated test, replay or
+game/window operation was performed.
