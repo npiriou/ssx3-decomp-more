@@ -196,6 +196,7 @@ pub fn overrides() -> Vec<(u32, GuestFn, &'static str)> {
     let mut v: Vec<(u32, GuestFn, &'static str)> = CORE.to_vec();
     v.extend(game::overrides());
     v.extend_from_slice(bonus_menu_mode::OVERRIDES);
+    v.extend_from_slice(custom_rail_diagnostics::OBSERVERS);
     v.extend_from_slice(custom_sky_render::OVERRIDES);
     v.extend_from_slice(custom_loading_texture::OVERRIDES);
     v.extend_from_slice(custom_peak_refresh::OVERRIDES);

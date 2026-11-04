@@ -2,6 +2,7 @@
 
 use ssx3_ee_rt::Cpu;
 use ssx3_ee_rt::cpu::reg::GP;
+use ssx3_ee_rt::funcs::GuestFn;
 use std::collections::{HashMap, HashSet};
 use std::fs::File;
 use std::io::Write;
@@ -10,12 +11,53 @@ use std::sync::{LazyLock, Mutex};
 #[derive(Default)]
 struct Trace {
     track: Option<&'static str>,
+    run: u64,
+    announced: bool,
     ticks: HashMap<u32, u8>,
-    regions: HashSet<(u32, u32, u32, i32, i32, i32)>,
+    regions: HashSet<Approach>,
+    nearest: HashMap<u32, Near>,
+    attempts: HashSet<(u32, u32, u8, bool, u32)>,
     file: Option<File>,
     opened: bool,
 }
+
+#[derive(Hash, Eq, PartialEq)]
+struct Approach {
+    rider: u32,
+    rail: u32,
+    state: u32,
+    cell: [i32; 3],
+    proximity: u8,
+    flags: u32,
+    in_query: bool,
+}
+
+#[derive(Clone, Copy)]
+struct Near {
+    rail: u32,
+    proximity: u8,
+    cycles: u64,
+    vsync: u32,
+}
 static TRACE: LazyLock<Mutex<Trace>> = LazyLock::new(|| Mutex::new(Trace::default()));
+
+/// Observations wrap the unchanged generated body. The retained typed
+/// TryStartRailslide is deliberately not installed for diagnostic purposes.
+pub const OBSERVERS: &[(u32, GuestFn, &str)] = &[
+    (0x0010_6848, try_start_railslide, "Rider_TryStartRailslide_Observe"),
+];
+
+fn try_start_railslide(c: &mut Cpu) {
+    use ssx3_ee_rt::cpu::reg::{A0, RA, SP, V0};
+    let (rider, ret, stack) = (c.g[A0][0] as u32, c.g[RA][0] as u32, c.g[SP][0] as u32);
+    ssx3_ee::s00::f_00106848__generated(c);
+    if c.pc == ret && c.g[SP][0] as u32 == stack {
+        // The native frame is0x140 bytes; its RailHit at SP+0 remains in
+        // RAM through the leaf epilogue. Read it only on a successful return.
+        let found = c.g[V0][0] != 0;
+        attempt(c, rider, stack.wrapping_sub(0x140), found);
+    }
+}
 
 fn valid(at: u32, size: u32) -> bool {
     let at = at & 0x1fff_ffff;
@@ -24,6 +66,26 @@ fn valid(at: u32, size: u32) -> bool {
 fn float(c: &mut Cpu, at: u32) -> f32 { f32::from_bits(c.bus.read32(at)) }
 
 impl Trace {
+    fn reset_run(&mut self) {
+        self.run = self.run.wrapping_add(1);
+        self.announced = false;
+        self.ticks.clear();
+        self.regions.clear();
+        self.nearest.clear();
+        self.attempts.clear();
+    }
+
+    fn sync(&mut self, track: &'static str) {
+        if self.track != Some(track) {
+            self.track = Some(track);
+            self.reset_run();
+        }
+        if !self.announced {
+            self.announced = true;
+            self.write(&format!("[tricky rail v3] course={track} run={}", self.run));
+        }
+    }
+
     fn write(&mut self, line: &str) {
         if !self.opened {
             self.opened = true;
@@ -39,6 +101,15 @@ impl Trace {
         eprintln!("{line}");
         if let Some(file) = &mut self.file { let _ = writeln!(file, "{line}"); }
     }
+}
+
+pub fn restart() {
+    TRACE.lock().unwrap().reset_run();
+}
+
+/// These are observation bands, not native rail acceptance thresholds.
+fn proximity(distance: f32) -> u8 {
+    [25., 50., 100., 300.].iter().position(|&limit| distance < limit).unwrap_or(4) as u8
 }
 
 fn box_distance(c: &mut Cpu, at: u32, position: &[f32; 3]) -> f32 {
@@ -64,12 +135,7 @@ pub fn observe(c: &mut Cpu, rider: u32) {
     let state = c.bus.read32(owner + 0xde0);
     if state > 1 && state != 4 { return }
     let mut trace = TRACE.lock().unwrap();
-    if trace.track != Some(track.id) {
-        trace.track = Some(track.id);
-        trace.ticks.clear();
-        trace.regions.clear();
-        trace.write(&format!("[tricky rail v2] course={}", track.id));
-    }
+    trace.sync(track.id);
     // Ten observations per second at 60 Hz, including successful grinding.
     // Host counters only: neither native registers nor RAM are changed.
     let ticks = trace.ticks.entry(rider).or_default();
@@ -131,10 +197,13 @@ pub fn observe(c: &mut Cpu, rider: u32) {
             }
         }
     }
-    let Some((index, rail, segment, rail_point, t)) = nearest else { return };
-    let region = (rider, index, state, position[0].div_euclid(500.) as i32,
-                  position[1].div_euclid(500.) as i32, position[2].div_euclid(500.) as i32);
-    if !trace.regions.insert(region) { return }
+    let Some((index, rail, segment, rail_point, t)) = nearest else {
+        trace.nearest.remove(&rider);
+        return;
+    };
+    let proximity = proximity(distance.sqrt());
+    let near = Near { rail: index, proximity, cycles: c.cycles, vsync: crate::tick::vsync_count(c) };
+    trace.nearest.insert(rider, near);
     let mut matching = 0;
     let mut types = [0u32; 4];
     for i in 0..count.min(512) {
@@ -149,5 +218,39 @@ pub fn observe(c: &mut Cpu, rider: u32) {
     let surface = c.bus.read32(rail + 0x28) as i32;
     let kind = c.bus.read32(segment + 8);
     let parent_ok = c.bus.read32(segment + 0x68) == rail;
-    trace.write(&format!("[tricky rail] {} rider={rider:08x} state={state} at={position:?} velocity={velocity:?} candidates={count} types={types:?} rail={index} flags={flags:08x} surface={surface} kind={kind} parent_ok={parent_ok} matching={matching} sampled_distance_cm={:.1} rail_point={rail_point:?} t={t:.5}", track.id, distance.sqrt()));
+    let region = Approach {
+        rider, rail: index, state,
+        cell: position.map(|p| p.div_euclid(500.) as i32),
+        proximity, flags, in_query: matching != 0,
+    };
+    if !trace.regions.insert(region) { return }
+    let run = trace.run;
+    trace.write(&format!("[tricky rail] {} run={run} rider={rider:08x} state={state} at={position:?} velocity={velocity:?} candidates={count} types={types:?} rail={index} flags={flags:08x} surface={surface} kind={kind} parent_ok={parent_ok} matching={matching} proximity={proximity} sampled_distance_cm={:.1} rail_point={rail_point:?} t={t:.5}", track.id, distance.sqrt()));
+}
+
+/// Observe the native call's actual result, without repeating its query.
+/// The nearest sampled rail is labelled separately: it is not a failed
+/// query's contact and may precede this call by several updates.
+fn attempt(c: &mut Cpu, rider: u32, contact: u32, found: bool) {
+    let Some(track) = crate::custom_tracks::active() else { return };
+    if !valid(rider, 0x9e0) || c.bus.read32(rider + 0x874) == 0 { return }
+    let mut trace = TRACE.lock().unwrap();
+    trace.sync(track.id);
+    if trace.attempts.len() >= 512 { return }
+    let Some(near) = trace.nearest.get(&rider).copied() else { return };
+    let age = crate::tick::vsync_count(c).wrapping_sub(near.vsync);
+    if age > 6 || (near.proximity > 2 && !found) { return }
+    let owner = c.bus.read32(rider + 0x77c);
+    if !valid(owner, 0xde4) { return }
+    let state = c.bus.read32(owner + 0xde0);
+    if !trace.attempts.insert((rider, near.rail, near.proximity, found, state)) { return }
+    let hit = if found && valid(contact, 0x6c) {
+        let point: [f32; 3] = std::array::from_fn(|i| float(c, contact + i as u32 * 4));
+        let descriptor = c.bus.read32(contact + 0x58);
+        let rid = valid(descriptor, 4).then(|| c.bus.read32(descriptor));
+        Some((point, c.bus.read32(contact + 0x44), c.bus.read32(contact + 0x4c) as i32, descriptor, rid))
+    } else { None };
+    let run = trace.run;
+    trace.write(&format!("[tricky rail attempt] {} run={run} stage=try-return rider={rider:08x} state={state} found={found} last_observed_rail={} proximity={} observation_age_ticks={age} observation_age_cycles={} native_hit_point_kind_surface_descriptor_rid={hit:?}",
+        track.id, near.rail, near.proximity, c.cycles.saturating_sub(near.cycles)));
 }
