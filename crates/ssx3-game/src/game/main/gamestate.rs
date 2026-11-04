@@ -1626,6 +1626,18 @@ pub fn game_state_results_update(c: &mut Cpu) {
         let frame = Frame::open(c, 0x10);
         c.g[V0][0] = 1;
         frame.save_ra(c, 0);
+        if crate::custom_results_enter::retry_pending_screen(c, results) {
+            c.g[A0][0] = 7;
+            crate::custom_finish_trace::observe(c, "results-screen-retry", 0, results);
+            // This native return site restores RA from the same0x10-byte
+            // frame and returns. It also safely handles a yielding UI call.
+            call_ptr(c, 0x0020_a8f8, 0x0023_6e90)?;
+            crate::custom_finish_trace::observe(c, "results-screen-retry-returned", 0, results);
+            frame.restore_ra(c, 0);
+            c.cycles += 2;
+            frame.close(c);
+            return Ok(());
+        }
         let state = c.lw_r_2(V1, r(c, A0).wrapping_add(8));
         frame.restore_ra(c, 0);
         if state == c.g[V0][0] {

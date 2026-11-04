@@ -155,3 +155,21 @@ No assets/importer changed: the19 v56 archives remain current. This is an
 installed contact correction, not manual confirmation of Elysium/Alaska's
 reported rails. No automated test, replay, gate, browser build or game/window
 operation is performed.
+
+## Original closest-point selection follow-up (v64)
+
+Source Tricky125cb8 calls259330 with the board origin and a normalized
+velocity argument. Inspection of the original USA ELF shows that259330
+overwrites that argument register before reading it; it does not perform a
+directional closest-point selection. It checks300cm axis-aligned bounds,
+source spline eligibility bit1, coarse quarter intervals and a bounded
+refinement of the distance to the original cubic. Native FindRail likewise
+passes300cm and its closest-point implementation335128 already has a typed
+Rust port. The source disassembly is retained in ignored
+`.cache/tricky-rail-candidate-v64.disasm.txt`.
+
+This rejects a hypothesized missing directional query as justification for
+replacing or repeating the native search. No additional rail threshold,
+curve, state/input guard or renderer change follows from this inspection.
+The v61 source contact-volume correction is still not a current manual
+confirmation of the reported Elysium/Alaska contacts.

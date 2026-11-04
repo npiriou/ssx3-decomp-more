@@ -137,3 +137,48 @@ The final native build succeeds in1m27s in
 ports remain unregistered and were not compiled or executed by that build.
 No importer/assets change, automated test, replay, gate, browser build or
 game/window operation is performed.
+
+## Preserving a gated results-screen request (v64)
+
+The v62 correction covers the delayed `finishov` request. The later results
+screen has an independent one-shot request: Results_Enter236da0 clears
+`self+8` and calls OpenScreenForState20a8f8 with7. That function returns
+before allocating or queuing any screen when the module gate is nonzero
+and signed-less-than10. The existing typed Results_Update236e60 only waits
+for `self+8 == 1`, which the missing UI would normally set. It never opens
+the results screen again. A gate active at this second request can therefore
+leave a results state waiting for a UI action that cannot occur.
+
+For imported courses, the actual20a8f8 entry now records only that explicit
+rejection when called from Results_Enter's236e40 return site. This wrapper
+then runs the unchanged generated native body once. Checking at the real
+callee entry covers calls reached through a generated Results_Enter
+continuation after a previous call yielded; an Enter-only Rust hook would
+not cover those continuations.
+
+The pending record contains the course, module and Results state identities.
+Results_Update waits for the same native gate to permit opening, consumes
+the record before making its one retry, and calls the ordinary state7 screen
+selector. Already-created screens are never registered as pending. A new
+Results_Enter, restart, changed identity or an already-completed results
+state clears the record. No completion/rank/score/input flag, game-state
+number or loading-state value is forced, and no missing-widget/timeout
+fallback is installed. Retail state flow retains its original behavior.
+
+The additional call uses the native Update frame and real236e90 return
+site. The supplied SSX3 ELF confirms that this continuation only restores
+RA at stack+0 and returns with stack+0x10. A UI callee that yields can thus
+resume through the existing generated epilogue without a synthetic PC or
+an unregistered host continuation. Passive records distinguish the gated
+request and its retry.
+
+This fixes another demonstrated request-loss path; no current Tokyo
+Race/Freestyle failure sample establishes it as the user's exact stall.
+Gameplay completion remains unproven. Assets remain the19 v63 archives,
+11 sound banks and7 TVM files. No automated tests, replays or game/window
+operations accompany this correction.
+
+Both generated dispatch forms include the20a8f8 wrapper slot. Native build
+`.cache/build-tricky-results-pending-v64.log` succeeds in2m02s; no Rust
+runtime change follows that build. The resulting executable is
+`target/game/ssx3.exe`. No browser build was run.

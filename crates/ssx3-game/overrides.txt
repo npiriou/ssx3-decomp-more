@@ -5466,3 +5466,4 @@
 0x00113130    Rider_GetStartDistToFinish
 0x00309270    WScriptMan_Update
 0x001086b8    Rider_ProbeRail
+0x0020a8f8    GameUI_OpenScreenForState
