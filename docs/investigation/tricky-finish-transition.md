@@ -9,8 +9,9 @@ tests, replays and game/window operations remain disabled for this work.
 - `Rider_OnFinishRace` (`125108`) marks the rider finished at `+470`, then calls
   `GameModeMan_OnRiderFinished` (`238358`). The installed dispatch retains the
   native mode handler before submitting the result snapshot.
-- The selected handler in saved Tokyo RAM is `GMHandler0_OnRiderFinished`
-  (`239230`). Its completion gate is `AI_AllPlayersFinished` (`12a250`), which
+- The selected handler in saved Tokyo Freestyle RAM is `GMHandler0_OnRiderFinished`
+  (`239230`); saved Race RAM selects handler1 (`23a760`). Their completion gate
+  is `AI_AllPlayersFinished` (`12a250`), which
   checks human players' riders at `+470`, rather than waiting for every AI
   competitor. Quick-event initialization selects heat 3. Heat 3 writes
   `GameModeMan+9c = 1`; intermediate heats intentionally do not.
@@ -73,3 +74,66 @@ The observer reads validated RAM addresses only. It writes no native RAM,
 registers, cycles, physics, result flags or UI state. Hooks after native calls
 can be absent if a call unwinds; absence alone does not prove that call hung.
 The observer neither launches the game nor drives a route or replay.
+
+## Preserving a gated menu request (v62)
+
+The v61 rail-contact change is installed separately in c96f957. This pass
+examines Race's handler1 as well as the earlier Freestyle handler0. Its two
+12a250 gates also inspect human players, not all racers. On the final gated
+human notification, it estimates unfinished racers' times through122d78,
+sorts them and sets manager+9c at heat3. It does not directly read a Tricky
+lap counter. Waiting for AI riders is not established as the cause of the
+reported Tokyo stall. The exact handler1 translation is retained uninstalled
+in `custom_gm_handler1_finish.rs`, without tests.
+
+The UI has two distinct interfaces. `GameUI_OpenScreenForState`20a8f8 maps
+game states2/7 to a screen and can reject a nonzero module state below10.
+`GameUI_OpenFinishScreen`20cc60 correctly calls the direct
+`GameUI_OpenScreen`20ab50 with finish-screen IDs0xc/0xd; Results_Enter
+correctly calls20a8f8 with game state7. The retained uninstalled
+`custom_game_ui_open_screen.rs` covers20a8f8; those interfaces must not be
+substituted for one another.
+
+An actual request-loss path exists in `custom_finish_update::overlay_timer`:
+it decremented the delay to0 before checking the module-state gate. If that
+gate was active on the expiry tick, no UI-open call occurred and subsequent
+updates saw no pending timer. An imported course could therefore remain in
+the finish state without ever retrying its sole menu request, even after
+the module became eligible.
+
+Imported events now retain1 pending tick only on that explicit pre-call
+rejection. The normal gate is checked on the following update; when it
+permits the request, the ordinary native screen-opening call runs once
+and the delay stays0. There is no timeout, forced result-ready flag,
+skipped delay, missing-widget fallback or repeated request after a screen
+has actually been queued. Retail events retain their original policy.
+
+This corrects the demonstrated lost-request path. It does not establish
+that it was the exact stage of the user's Tokyo failure; the current
+Race/Freestyle finish interaction still lacks a fresh gameplay observation.
+
+The actual direct screen factory20ab50 is also retained uninstalled in
+`custom_game_ui_open.rs`. IDs0xc/0xd construct their native0xa4-byte
+`finishov` states and push them through39f320, with no course/career or
+already-active-screen filter in those branches. Race uses vtable473e00
+(Init1e7bb0, Update1e8098); Freestyle uses473d28 (Init1e8200,
+Update1e87b8). Their Init paths are retained uninstalled in
+`custom_race_finish_ui_init.rs` / `custom_freestyle_finish_ui_init.rs` and
+explicitly clear timer+9c after base overlay
+initialization. Required placement/score widgets are not null-guarded;
+screen creation/loading remains a meaningful runtime boundary, but neither
+an uninitialized completed-Init timer nor a direct course-index lookup is
+supported as the cause.
+
+A read-only source/current-bank inventory confirms that the entire
+decompressed `finishov` definition in the prepared OV.LUI is byte-identical
+to the original disc:8540bytes, SHA256
+`2f7ae9db7767ade046c484e876dd364c798e7191057269183152f73696125cf8`.
+Evidence: `.cache/finish-ui-bank-v62-inspection.json`. This establishes
+resource preservation, not successful native loading/initialization.
+
+The final native build succeeds in1m27s in
+`.cache/build-tricky-finish-pending-v62.log`. The retained investigation
+ports remain unregistered and were not compiled or executed by that build.
+No importer/assets change, automated test, replay, gate, browser build or
+game/window operation is performed.

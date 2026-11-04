@@ -93,6 +93,13 @@ fn overlay_timer(c: &mut Cpu) -> Result<bool, Unwound> {
     }
     c.cycles += 2;
     if c.g[A1][0] != 0 {
+        // The module has explicitly rejected this request, so no finish
+        // state was created. Keep it pending for imported events instead
+        // of consuming their only menu-open attempt. Retrying only this
+        // pre-call rejection cannot queue duplicate finish dialogs.
+        if crate::custom_tracks::active().is_some() {
+            c.sw(r(c, S3).wrapping_add(OVERLAY_DELAY), 1);
+        }
         crate::custom_finish_trace::observe(c, "overlay-timer-gated", r(c, S3), r(c, A0));
         c.g[S0][0] = c.lw(r(c, S3).wrapping_add(PHASE));
         return Ok(true);
