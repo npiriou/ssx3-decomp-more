@@ -147,6 +147,16 @@ pub fn install(sink: Box<dyn FrameSink>) {
     ssx3_render::direct::set_active(true);
 }
 
+/// Replace GPU resources while preserving the CPU frame builder's carry state.
+pub fn replace_renderer(sink: Box<dyn FrameSink>) -> bool {
+    let mut active = SINK.lock().unwrap();
+    let Some(active) = active.as_mut() else {
+        return false;
+    };
+    active.sink = sink;
+    true
+}
+
 pub fn enabled() -> bool {
     ON.load(std::sync::atomic::Ordering::Acquire)
 }

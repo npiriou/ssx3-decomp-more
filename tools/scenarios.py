@@ -177,6 +177,18 @@ def monkey():
     return ",".join(ev), 20000
 
 
+def tricky_tokyo_freestyle_quit():
+    """Full menu entry, Tokyo initial ascent/ride, pause, confirm Quit, title."""
+    ev = ["1600:0008:8,2000:4000:8,2500:4000:8,2700:4000:8",
+          "2850:0040:6,2900:4000:8,3050:0040:6,3100:4000:8",
+          "3300:0040:6,3350:0040:6,3400:0040:6,3450:0040:6,3500:0040:6",
+          "3550:4000:8,3750:4000:8,4000:4000:8,4200:4000:8,4400:4000:8",
+          "4600:4000:8,4800:4000:8",
+          "8000:0008:6,8080:0040:6,8100:0040:6,8120:0040:6,8140:0040:6",
+          "8200:4000:6,8280:0010:6,8340:4000:6"]
+    return ",".join(ev), 10000
+
+
 def scenarios():
     out = {}
     for (peak, mode), names in EVENTS.items():
@@ -190,6 +202,7 @@ def scenarios():
     out["ctm_collectible"] = ctm_collectible()
     out["ctm_fresh"] = ctm_fresh()
     out["monkey"] = monkey()
+    out["tricky_tokyo_freestyle_quit"] = tricky_tokyo_freestyle_quit()
     return out
 
 

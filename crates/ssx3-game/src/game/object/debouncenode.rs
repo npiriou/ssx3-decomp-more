@@ -790,10 +790,13 @@ pub(crate) const EP_EVAL: u32 = 0x0034_530c;
 
 /// `void SplineModifier_EvalPathAtDistance(SplineModifier* self, float t,
 /// sDebVec4* pos, sDebVec4* vel, sDebVec4* acc)` (0x345248): reduce `t`
-/// modulo the key's length, walk the key chain backwards to the segment that
+/// modulo the path's total length, walk the key chain backwards to the segment that
 /// starts at or before `t` (while `t < key->t0`), then forwards over segments
-/// that end before `t`, and evaluate that segment. `self + 4` is the key
-/// index, `self + 8` the current key, `self + 0xc` its length. Dispatcher-
+/// that end before `t`, and evaluate that segment. `self` is the path descriptor:
+/// `self + 4` is the current key index, `self + 8` the current key, and
+/// `self + 0xc` the total length. Key `+0x84` is its cumulative start distance;
+/// the evaluator's coefficients at key `+0x50` must use the same distance unit.
+/// Dispatcher-
 /// shaped in the original: it is re-entered at the two walk loop heads
 /// (0x345298, 0x3452d8) after an unwind.
 pub fn spline_modifier_eval_path_at_distance(c: &mut Cpu) {
@@ -2350,6 +2353,119 @@ pub(crate) mod tests {
                 c.g[A1][0] = sx(DATA + 0x5000);
                 c.g[A2][0] = sx(DATA + 0x5100);
                 c.g[A3][0] = sx(DATA + 0x5200);
+                c.pc = EP_ENTRY;
+            },
+        );
+    }
+
+    #[test]
+    fn spline_modifier_eval_path_at_distance_large_distances_match() {
+        // Cumulative centimetre distances from the Snowdream chair path. Its
+        // 43 keys exercise long walks in both directions from a cached key.
+        const STARTS: [f32; 43] = [
+            0.0, 1007.3986, 2261.5327, 8360.898, 9842.386, 10782.482, 14569.887, 17278.008,
+            19274.55, 24454.41, 28505.182, 32614.188, 37991.047, 39923.48, 42439.79, 46028.84,
+            49086.64, 53118.42, 54676.01, 57802.973, 61205.21, 65474.633, 67456.58, 71103.29,
+            75121.49, 78589.16, 81004.28, 86185.37, 88804.414, 90947.92, 95203.586, 97131.69,
+            103667.516, 106609.85, 110889.49, 115729.7, 118462.09, 123251.34, 124777.695,
+            128562.625, 130205.945, 134475.88, 140338.89,
+        ];
+        const TOTAL: f32 = 142517.72;
+        const FIRST: u32 = DATA + 0x1000;
+        const POS: u32 = DATA + 0x5000;
+
+        fn checked_hand(c: &mut Cpu) {
+            spline_modifier_eval_path_at_distance(c);
+            let expected = c.bus.read32(DATA + 0x20);
+            assert_eq!(c.bus.read32(DATA + 4), expected);
+            assert_eq!(c.bus.read32(DATA + 8), FIRST + expected * 0x90);
+            for output in [POS, POS + 0x100, POS + 0x200] {
+                for lane in 0..4 {
+                    let value = f32::from_bits(c.bus.read32(output + lane * 4));
+                    assert!(value.is_finite(), "non-finite spline output: {value}");
+                }
+            }
+            for lane in 0..3 {
+                let value = f32::from_bits(c.bus.read32(POS + lane * 4));
+                assert!(value.abs() < 50000.0, "extrapolated position: {value}");
+            }
+        }
+
+        check(
+            ee::s11::f_00345248__generated,
+            checked_hand,
+            32,
+            &|c, seed| {
+                base(c, seed, 0x3452_0043);
+                for (i, &start) in STARTS.iter().enumerate() {
+                    let key = FIRST + i as u32 * 0x90;
+                    let end = STARTS.get(i + 1).copied().unwrap_or(TOTAL);
+                    let length = end - start;
+                    c.bus.write32(key + 0xc, f(length));
+                    c.bus.write32(key + 0x84, f(start));
+                    c.bus
+                        .write32(key + 0x60, if i == 0 { 0 } else { key - 0x90 });
+                    c.bus.write32(
+                        key + 0x64,
+                        if i + 1 == STARTS.len() { 0 } else { key + 0x90 },
+                    );
+                    // A monotonic cubic mapping from local distance to u in
+                    // [0, 1]. Coefficients must be expressed per centimetre,
+                    // including the squared/cubed powers of that unit.
+                    put_vec(
+                        c,
+                        key + 0x50,
+                        [
+                            f(0.1 / (length * length * length)),
+                            f(-0.1 / (length * length)),
+                            f(1.0 / length),
+                            f(0.0),
+                        ],
+                    );
+                    for (q, row) in [
+                        [20.0, -30.0, 40.0, 0.0],
+                        [-10.0, 50.0, -60.0, 0.0],
+                        [100.0, -90.0, 80.0, 0.0],
+                        [i as f32 * 100.0, -20000.0, -10000.0, 1.0],
+                    ]
+                    .into_iter()
+                    .enumerate()
+                    {
+                        put_vec(c, key + 0x10 + q as u32 * 0x10, row.map(f));
+                    }
+                }
+                let distance = match seed {
+                    0..=14 => 4633.3037 + seed as f32 * (TOTAL / 15.0),
+                    15 => -0.5,
+                    16 => -TOTAL - 100.0,
+                    17 => 0.0,
+                    18 => TOTAL,
+                    19 => TOTAL * 3.0 + 99645.12,
+                    20 => -TOTAL * 3.0 + 99645.12,
+                    21 => STARTS[31],
+                    22 => STARTS[31] - 0.5,
+                    23 => STARTS[42],
+                    24 => STARTS[2],
+                    25 => STARTS[2] - 0.125,
+                    26 => TOTAL - 0.5,
+                    27 => TOTAL + 0.5,
+                    28 => STARTS[21],
+                    29 => STARTS[21] + 0.125,
+                    30 => -STARTS[31],
+                    _ => STARTS[41] + 0.5,
+                };
+                let wrapped = distance - (distance / TOTAL).floor() * TOTAL;
+                let expected = STARTS.iter().rposition(|&start| start <= wrapped).unwrap();
+                let initial = (seed * 17 + 41) as usize % STARTS.len();
+                c.bus.write32(DATA + 4, initial as u32);
+                c.bus.write32(DATA + 8, FIRST + initial as u32 * 0x90);
+                c.bus.write32(DATA + 0xc, f(TOTAL));
+                c.bus.write32(DATA + 0x20, expected as u32);
+                c.g[A0][0] = sx(DATA);
+                c.g[A1][0] = sx(POS);
+                c.g[A2][0] = sx(POS + 0x100);
+                c.g[A3][0] = sx(POS + 0x200);
+                c.f[12] = f(distance);
                 c.pc = EP_ENTRY;
             },
         );

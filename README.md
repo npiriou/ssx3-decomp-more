@@ -50,7 +50,7 @@ Tested on macOS (Apple Silicon) and Windows. On Linux (Ubuntu 24.04) the setup, 
 build work; playing there is untested.
 
 ```sh
-git clone --branch v0.1.0 https://github.com/npiriou/ssx3-decomp-more.git
+git clone --branch v0.1.1 https://github.com/npiriou/ssx3-decomp-more.git
 cd ssx3-decomp-more
 cp /path/to/your/image.iso "SSX 3 (USA).iso"   # or set SSX3_ISO
 python3 tools/setup.py                         # extract, check, recompile into generated/
@@ -61,7 +61,7 @@ On Windows, use PowerShell after installing Rust with the MSVC toolchain,
 Python 3, and Visual Studio Build Tools with **Desktop development with C++**:
 
 ```powershell
-git clone --branch v0.1.0 https://github.com/npiriou/ssx3-decomp-more.git
+git clone --branch v0.1.1 https://github.com/npiriou/ssx3-decomp-more.git
 cd ssx3-decomp-more
 # Copy your USA disc image into this folder as "SSX 3 (USA).iso".
 # For an image elsewhere, set $env:SSX3_ISO to its full path first.
@@ -97,6 +97,11 @@ if that image is elsewhere. Imported assets stay local under `.cache/`;
 they are regenerated from each player's discs. See
 [`docs/modding/custom-tracks.md`](docs/modding/custom-tracks.md) for details
 and current limitations.
+
+**Updating from v0.1.0:** rebuild the game and run
+`python3 tools/prepare_tricky_tracks.py` again (Windows: `python`). This
+regenerates existing Tricky archives with corrected moving-object trajectories.
+The importer detects the changed converter and rebuilds outdated archives.
 
 ## Playing
 

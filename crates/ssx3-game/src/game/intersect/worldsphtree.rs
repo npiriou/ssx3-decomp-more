@@ -12119,6 +12119,100 @@ pub(crate) mod tests {
     }
 
     #[test]
+    fn cell_gather_objects_long_mixed_list_matches() {
+        // A populated imported cell can contain far more than the original
+        // fixture's three objects. Keep the output separate from the list
+        // and cover each separating axis, touching boxes, ignored flags,
+        // static-over-dynamic flag priority, and dynamic virtual callbacks.
+        check(
+            ee::s11::f_003309d8__generated,
+            cell_gather_objects,
+            40,
+            &|c, seed| {
+                let _rng = setup_machine(c, seed, 0x3309_d8, 16);
+                let (cell, q, qbox, out, count) = (
+                    DATA,
+                    DATA + 0x1000,
+                    DATA + 0x1200,
+                    DATA + 0x2000,
+                    DATA + 0x1100,
+                );
+                let query_min = [-1.0, -2.0, -3.0];
+                let query_max = [1.0, 2.0, 3.0];
+                c.bus.write32(q, out);
+                c.bus.write32(q + 4, count);
+                c.bus.write32(q + 0xc, qbox);
+                c.bus.write32(count, seed % 5);
+                for axis in 0..3u32 {
+                    c.bus.write32(qbox + 4 * axis, f(query_min[axis as usize]));
+                    c.bus.write32(qbox + 0x10 + 4 * axis, f(query_max[axis as usize]));
+                }
+
+                let bounds = |case: u32| {
+                    let mut lo = [-0.5; 3];
+                    let mut hi = [0.5; 3];
+                    match case {
+                        1 | 3 | 5 => {
+                            let axis = ((case - 1) / 2) as usize;
+                            hi[axis] = query_min[axis] - 1.0;
+                            lo[axis] = hi[axis] - 1.0;
+                        }
+                        2 | 4 | 6 => {
+                            let axis = ((case - 2) / 2) as usize;
+                            lo[axis] = query_max[axis] + 1.0;
+                            hi[axis] = lo[axis] + 1.0;
+                        }
+                        7 => {
+                            lo = query_max;
+                            hi = query_max.map(|value| value + 1.0);
+                        }
+                        8 => {
+                            lo = query_min.map(|value| value - 1.0);
+                            hi = query_min;
+                        }
+                        _ => {}
+                    }
+                    (lo, hi)
+                };
+                let (lo, hi) = bounds(seed % 8);
+                for axis in 0..3u32 {
+                    c.bus.write32(BOX2 + 4 * axis, f(lo[axis as usize]));
+                    c.bus.write32(BOX2 + 0x10 + 4 * axis, f(hi[axis as usize]));
+                }
+
+                let length = match seed % 11 {
+                    0 => 0,
+                    1 => 1,
+                    _ => 64,
+                };
+                let mut next = 0;
+                for i in (0..length).rev() {
+                    let object = DATA + 0x4000 + i * 0x100;
+                    let case = (i + seed) % 10;
+                    c.bus.write32(object, next);
+                    c.bus.write32(object + 8, match case {
+                        0 => 0,
+                        8 => 0x60,
+                        9 => 0x40,
+                        _ => 0x20,
+                    });
+                    c.bus.write32(object + 0xc, object + 0x90);
+                    c.bus.write32(object + 0x9c, VT_SUB);
+                    let (lo, hi) = bounds(case);
+                    for axis in 0..3u32 {
+                        c.bus.write32(object + 0x60 + 4 * axis, f(lo[axis as usize]));
+                        c.bus.write32(object + 0x6c + 4 * axis, f(hi[axis as usize]));
+                    }
+                    next = object;
+                }
+                c.bus.write32(cell + 0x20, next);
+                c.g[A0][0] = sx(q);
+                c.g[A1][0] = sx(cell);
+            },
+        );
+    }
+
+    #[test]
     fn cell_collide_instance_matches() {
         check(
             ee::s11::f_00335960__generated,

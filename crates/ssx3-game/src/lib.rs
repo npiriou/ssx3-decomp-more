@@ -129,6 +129,9 @@ pub mod containers;
 pub mod debug;
 #[cfg(test)]
 pub mod difftest;
+// Retained audit port: compare it without installing a runtime override.
+#[cfg(test)]
+mod custom_multi_spline_nodes;
 #[cfg(feature = "dispatch")]
 pub mod dispatch;
 /// `SSX3_EVENT`: boot straight into an event (a development aid).

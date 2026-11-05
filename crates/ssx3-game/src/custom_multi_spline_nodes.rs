@@ -1,5 +1,5 @@
 //! Native MultiSplineModifier_UpdateNodes35ac20, retained uninstalled.
-//! No tests, builds, replays or game/window operations: the user disabled them.
+//! Its differential test keeps the real bounded path and trigonometry callees.
 
 use crate::call::{call_ptr, guest, Callee, Frame};
 use crate::events::{deliver_event_here, event_due};
@@ -236,8 +236,11 @@ fn apply_yaw_offset(c: &mut Cpu) {
 /// `void MultiSplineModifier_UpdateNodes(MultiSplineModifier* self)`.
 ///
 /// Evenly space count copies at currentDistance+i*length/count; wrap each
-/// sample once into the path interval. Evaluate position/tangent/curvature
-/// into each0x60-byte element. Modes0/1/2/3 mean no tangent orientation,
+/// sample once into the path interval. Distances, total length and the path's
+/// segment starts must use the same units. This routine does not normalize a
+/// sample to [0, 1]: the segment's polynomial supplies that conversion.
+/// Evaluate position/tangent/curvature into each 0x60-byte element.
+/// Modes 0/1/2/3 mean no tangent orientation,
 /// pitch only, yaw only, or both; roll stays zero. Fill each instance's
 /// matrix, apply optional yaw offset, then clear dirty+30.
 /// This routine does not allocate, create instances or scale model geometry.
@@ -646,4 +649,103 @@ pub fn multi_spline_modifier_update_nodes(c: &mut Cpu) {
             }
         }
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::difftest::{check, elf_image, fill, put_vec, scramble, Rng, DATA, GAME_GP};
+
+    /// Keep callees real: a single linear segment gives exactly the selected
+    /// tangent, including the zero/axis-aligned cases in the Euler branches.
+    /// The polynomial maps length-unit distance to a parameter; its basis
+    /// provides position and tangent without touching world or heap state.
+    #[test]
+    fn multi_spline_modifier_update_nodes_matches() {
+        check(
+            ssx3_ee::s11::f_0035ac20,
+            multi_spline_modifier_update_nodes,
+            180,
+            &|c, seed| {
+                elf_image(c); // SinCos/Atan constants, tables, and yaw axis.
+                let mut random = Rng(0x35ac_20d1_57a0_0000 ^ seed as u64);
+                scramble(c, &mut random);
+                c.g[GP][0] = sx(GAME_GP);
+                c.g[A0][0] = sx(DATA);
+                c.pc = ENTRY;
+                let stack = r(c, SP).wrapping_sub(FRAME_BYTES);
+                fill(c, &mut random, stack, FRAME_BYTES / 4);
+
+                let elements = DATA + 0x1000;
+                let instances = DATA + 0x2000;
+                let curve = DATA + 0x6000;
+                let count = if seed % 19 == 0 {
+                    0
+                } else if seed % 23 == 0 {
+                    u32::MAX
+                } else if seed % 17 == 0 {
+                    15
+                } else if seed % 7 == 0 {
+                    1
+                } else {
+                    3
+                };
+                c.bus.write32(DATA + COUNT, count);
+                c.bus.write32(DATA + MODE, seed % 5);
+                c.bus.write32(
+                    DATA + YAW_OFFSET,
+                    if (seed / 45) % 2 == 0 { 0 } else { 0x3fc9_0fdb },
+                );
+                // Cover both sides of the one-wrap correction, exact end
+                // points, and distances beyond its own one-length domain.
+                let distance = [-32.0f32, -16.0, -0.25, 0.0, 8.0, 16.0, 31.75, 40.0]
+                    [(seed as usize / 3) % 8];
+                c.bus.write32(DATA + DISTANCE, distance.to_bits());
+                c.bus.write32(DATA + LENGTH, 16.0f32.to_bits());
+                c.bus.write32(DATA + DIRTY, random.next_u32() | 1);
+                c.bus.write32(DATA + ELEMENT_TABLE, elements);
+                c.bus.write32(DATA + INSTANCES, instances);
+                c.bus.write32(DATA + FOLLOW, 0x3731);
+                c.bus.write32(DATA + FOLLOW + 4, 0);
+                c.bus.write32(DATA + FOLLOW + 8, curve);
+                for i in 0..15 {
+                    fill(c, &mut random, elements + i * 0x60, 0x60 / 4);
+                    let instance = DATA + 0x3000 + i * 0xb0;
+                    fill(c, &mut random, instance, 0xb0 / 4);
+                    c.bus.write32(instances + 4 * i, instance);
+                }
+
+                let tangents = [
+                    [0.0f32, 0.0, 0.0],
+                    [0.0, 1.0, 0.0],
+                    [0.0, -1.0, 0.0],
+                    [1.0, 1.0, 1.0],
+                    [1.0, -1.0, -1.0],
+                    [-1.0, 1.0, 1.0],
+                    [-1.0, -1.0, -1.0],
+                    [0.0, 0.0, 1.0],
+                    [0.0, 0.0, -1.0],
+                ];
+                let tangent = tangents[((seed / 5) % 9) as usize];
+                put_vec(c, curve + 0x10, [0; 4]);
+                put_vec(c, curve + 0x20, [0; 4]);
+                put_vec(
+                    c,
+                    curve + 0x30,
+                    [tangent[0].to_bits(), tangent[1].to_bits(), tangent[2].to_bits(), 0],
+                );
+                put_vec(
+                    c,
+                    curve + 0x40,
+                    [37.0f32.to_bits(), (-11.0f32).to_bits(), 23.0f32.to_bits(), 1.0f32.to_bits()],
+                );
+                for (offset, value) in [(0x50, 0), (0x54, 0), (0x58, 0x3d80_0000), (0x5c, 0)] {
+                    c.bus.write32(curve + offset, value);
+                }
+                c.bus.write32(curve + 0x60, 0);
+                c.bus.write32(curve + 0x64, 0);
+                c.bus.write32(curve + 0x84, 0);
+            },
+        );
+    }
 }

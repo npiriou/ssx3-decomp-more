@@ -215,6 +215,7 @@ type Job = ssx3_ps2::frame_sink::Published;
 /// latest image on screen.
 #[derive(Default)]
 pub struct Shared {
+    device: ssx3_ps2::gpu::DeviceState,
     tx: Mutex<Option<std::sync::mpsc::SyncSender<Job>>>,
     /// Frames sent and not yet rendered.
     pending: Mutex<usize>,
@@ -255,6 +256,14 @@ fn in_buffers(tbp: u32, d: &frame::DisplayState) -> bool {
 
 impl Renderer {
     pub fn new(dev: wgpu::Device, queue: wgpu::Queue) -> Renderer {
+        Self::new_with_state(dev, queue, ssx3_ps2::gpu::DeviceState::default())
+    }
+
+    pub fn new_with_state(
+        dev: wgpu::Device,
+        queue: wgpu::Queue,
+        device: ssx3_ps2::gpu::DeviceState,
+    ) -> Renderer {
         let pipes = draw::Pipelines::new(&dev);
         let white = dev
             .create_texture(&wgpu::TextureDescriptor {
@@ -291,7 +300,10 @@ impl Renderer {
                 depth_or_array_layers: 1,
             },
         );
-        let shared = Arc::new(Shared::default());
+        let shared = Arc::new(Shared {
+            device,
+            ..Default::default()
+        });
         let depth_query = depth_query::DepthQuery::new(&dev);
         let bake_blur = bake_blur::BakeBlur::new(&dev);
         Renderer(
@@ -389,12 +401,39 @@ impl Renderer {
     /// frames handed over are rendered).
     pub fn read_image(&self) -> Option<(u32, u32, Vec<u32>)> {
         self.flush();
-        self.0.lock().unwrap().read_image()
+        let inner = self.0.lock().unwrap();
+        self.1.device.run(|| inner.read_image()).flatten()
+    }
+
+    /// Keep CPU draw state and depth numbering when replacing GPU resources.
+    /// Texture/pipeline/buffer caches are rebuilt on the replacement device.
+    pub fn inherit_state(&self, previous: &Renderer) {
+        previous.flush();
+        // The worker holds Shared too; remove its sender so the old worker
+        // exits and releases its GPU caches after the queue has drained.
+        previous.1.tx.lock().unwrap().take();
+        let mut old = previous.0.lock().unwrap();
+        let mut new = self.0.lock().unwrap();
+        new.gs = std::mem::take(&mut old.gs);
+        new.vu = old.vu.clone();
+        new.stats = old.stats;
+        new.frames_in = old.frames_in;
+        new.phase1_end = old.phase1_end;
+        new.display_fbp = old.display_fbp;
+        new.zscale = old.zscale;
+        new.key_light = old.key_light;
+        new.live_ambient = old.live_ambient;
+        new.live_colour = old.live_colour;
+        new.flare_sun = old.flare_sun;
+        new.t0 = old.t0;
     }
 
     /// The last frame's image on screen as an sRGB view (same device as
     /// the GS), with its size.
     pub fn present_view(&self) -> Option<(wgpu::TextureView, u32, u32)> {
+        if self.1.device.is_lost() {
+            return None;
+        }
         let g = self.1.present.lock().unwrap();
         let t = g.as_ref()?.0.last()?;
         let view = t.create_view(&wgpu::TextureViewDescriptor {
@@ -517,6 +556,9 @@ impl ssx3_ps2::frame_sink::FrameSink for Renderer {
     /// see the same depth whatever the threads' timing. Without a render
     /// thread (the browser), or after 100 ms, the latest depth instead.
     fn depth_of(&mut self, frame: u64) -> Option<ssx3_ps2::frame_sink::Depth> {
+        if self.1.device.is_lost() {
+            return None;
+        }
         if self.1.tx.lock().unwrap().is_none() {
             return self.depth();
         }
@@ -943,10 +985,13 @@ impl Inner {
         mem: &ssx3_ps2::frame_sink::FrameMem,
     ) {
         self.frames_in += 1;
-        if let Some(full) = &mem.full {
-            ssx3_ps2::frame_sink::dump_frame(carry, full, &self.vu[..]);
-        }
-        self.render(built, mem);
+        let device = self.shared.device.clone();
+        let _ = device.run(|| {
+            if let Some(full) = &mem.full {
+                ssx3_ps2::frame_sink::dump_frame(carry, full, &self.vu[..]);
+            }
+            self.render(built, mem);
+        });
     }
 
     /// Render a frame.
@@ -988,10 +1033,16 @@ impl Inner {
         self.world_casters = built.casters.clone();
         self.painter_sun = built.sun;
         self.frame_gm = built.frame.gm;
-        self.frame_groundmark = built.frame.draws().find(|d| {
-            d.state.raw[0] == 0xc0 && d.state.raw[1] == 0x0140_0294
-                && d.state.layer == 3 && d.state.material_param == 0
-        }).and_then(|d| d.tex[0]);
+        self.frame_groundmark = built
+            .frame
+            .draws()
+            .find(|d| {
+                d.state.raw[0] == 0xc0
+                    && d.state.raw[1] == 0x0140_0294
+                    && d.state.layer == 3
+                    && d.state.material_param == 0
+            })
+            .and_then(|d| d.tex[0]);
         Build::run(&mut b, built, mem);
         self.put_build(b);
         self.timing.1[0] += t_start.elapsed().as_secs_f64() * 1e3;
@@ -1260,7 +1311,12 @@ impl Inner {
         });
         // Plans per batch, uniforms, bind groups.
         let mut groundmark = self.groundmark_trace.begin(
-            self.stats.frames, &self.gs, mem, self.frame_gm, self.frame_groundmark, self.opts,
+            self.stats.frames,
+            &self.gs,
+            mem,
+            self.frame_gm,
+            self.frame_groundmark,
+            self.opts,
         );
         let batches = std::mem::take(&mut self.gs.batches);
         // With sun shadows the game's own rider shadows go: the render

@@ -159,7 +159,7 @@ impl Presenter {
     /// Create the device and render pipeline for `window`. With `gs`
     /// (the GPU GS backend's device), present with that device so GS frames
     /// can be shown without leaving the GPU.
-    pub async fn new(window: Arc<Window>, gs: Option<&'static ssx3_ps2::gpu::GpuContext>) -> Self {
+    pub async fn new(window: Arc<Window>, gs: Option<&ssx3_ps2::gpu::GpuContext>) -> Self {
         let shared = gs.and_then(|ctx| {
             let surface = ctx.instance.create_surface(window.clone()).ok()?;
             if !ctx.adapter.is_surface_supported(&surface) {
@@ -178,8 +178,9 @@ impl Presenter {
         let (surface, adapter, device, queue) = match shared {
             Some(s) => s,
             None => {
-                let instance =
-                    wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
+                let instance = wgpu::Instance::new(
+                    wgpu::InstanceDescriptor::new_without_display_handle().with_env(),
+                );
                 let surface = instance
                     .create_surface(window.clone())
                     .expect("create surface");
@@ -369,7 +370,7 @@ impl Presenter {
     }
 
     /// Whether `frame` (from `Gs::display_gpu`) lives on this presenter's device.
-    pub fn same_device(&self, gs: Option<&'static ssx3_ps2::gpu::GpuContext>) -> bool {
+    pub fn same_device(&self, gs: Option<&ssx3_ps2::gpu::GpuContext>) -> bool {
         gs.is_some_and(|c| c.device == self.device)
     }
 

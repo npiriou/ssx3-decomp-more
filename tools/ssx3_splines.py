@@ -69,7 +69,13 @@ def convert_splines(pbd: dict, template: bytes, section_id: int) -> list[bytes]:
             body.extend(struct.pack("<f", source["length"]))
             for point in source["control_points"]:
                 body.extend(struct.pack("<4f", *point))
-            body.extend(struct.pack("<4f", *source["coefficients"]))
+            # Tricky's inverse arc-length polynomial takes metres, whereas
+            # SSX 3 evaluates it with the centimetre distances stored above.
+            # u = ((a*d + b)*d + c)*d + e; geometry is already in centimetres.
+            # Copying these coefficients makes moving objects leave the world
+            # and eventually corrupt the native spatial lists.
+            body.extend(struct.pack("<4f", *(value / divisor for value, divisor
+                        in zip(source["coefficients"], (1e6, 1e4, 1e2, 1)))))
             body.extend(struct.pack("<3I", source["previous"],
                                     source["next"], index))
             body.extend(struct.pack("<6f", *source["bounds_min"],

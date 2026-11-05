@@ -182,12 +182,30 @@ pub fn fatal(c: &mut Cpu, pc: u32, msg: &str) {
             m!(c).kernel.current,
             c.cycles
         );
-        if let Some(dir) = std::env::var_os("SSX3_DEBUG_SNAPSHOT") {
-            let dir = std::path::PathBuf::from(dir);
-            let _ = std::fs::create_dir_all(&dir);
-            let _ = std::fs::write(dir.join("halt-ram.bin"), &c.bus.ram[..]);
-            let _ = std::fs::write(dir.join("halt-state.txt"), format!(
-                "target={pc:#x}\nra={ra:#x}\nregisters={:?}\n", c.g));
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let dir = std::env::var_os("SSX3_DEBUG_SNAPSHOT")
+                .map(std::path::PathBuf::from)
+                .unwrap_or_else(|| {
+                    let epoch = std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .map(|d| d.as_millis())
+                        .unwrap_or(0);
+                    std::path::PathBuf::from(".cache/diagnostics")
+                        .join(format!("halt-{}-{epoch}", std::process::id()))
+                });
+            let saved =
+                std::fs::create_dir_all(&dir)
+                    .and_then(|_| std::fs::write(dir.join("halt-ram.bin"), &c.bus.ram[..]))
+                    .and_then(|_| {
+                        std::fs::write(
+                            dir.join("halt-state.txt"),
+                            format!(
+                    "target={pc:#x}\nra={ra:#x}\nthread={}\ncycles={}\nregisters={:?}\n",
+                    m!(c).kernel.current, c.cycles, c.g),
+                        )
+                    });
+            eprintln!("[diagnostics] halt snapshot {}: {saved:?}", dir.display());
         }
         m!(c).kernel.halted = Some(format!("{msg} at {pc:#010x}"));
     }

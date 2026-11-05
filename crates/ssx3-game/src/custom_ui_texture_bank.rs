@@ -136,6 +136,12 @@ fn resolve_bank_images(c: &mut Cpu) -> Flow {
             c.g[A0][0] = c.lh(r(c, V1).wrapping_add(0x170));
             c.g[V0][0] = c.lw(r(c, V1).wrapping_add(0x174));
             let target = r(c, V0);
+            if target == 0 || target & 3 != 0 || target >= 0x0200_0000 {
+                eprintln!(
+                    "[ui texture] invalid renderer callback: target={target:08x} graphics={:08x} vtable={:08x} bank={:08x} image={} texture_set={:08x}",
+                    r(c, T2), r(c, V1), r(c, S3), r(c, S0), r(c, S1)
+                );
+            }
             c.g[A0][0] = sx(r(c, T2).wrapping_add(r(c, A0)));
             call_ptr(c, target, 0x0039_820c)?;
             c.g[A0][0] = c.lw(r(c, S1).wrapping_add(4));

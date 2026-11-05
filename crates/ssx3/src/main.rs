@@ -51,7 +51,7 @@ struct App {
     /// shows frame N-1 (or newer) while the GS thread finishes frame N.
     pending_display: Option<u64>,
     /// The GS's wgpu device (GPU backend).
-    gpu_ctx: Option<&'static ssx3_ps2::gpu::GpuContext>,
+    gpu_ctx: Option<Arc<ssx3_ps2::gpu::GpuContext>>,
     /// The draw-layer renderer (`SSX3_RENDER`, native by default).
     gfx: Option<ssx3_gfx::Renderer>,
     /// The frame pacer: the game runs on the wall clock at the game rate,
@@ -292,7 +292,7 @@ impl ApplicationHandler for App {
         // the pointer while it is over the window.
         window.set_cursor_visible(false);
         let gs = ssx3_ps2::gpu::context();
-        self.gpu_ctx = gs;
+        self.gpu_ctx = gs.map(|ctx| Arc::new(ctx.clone()));
         self.presenter = Some(pollster::block_on(Presenter::new(window.clone(), gs)));
         let size = window.inner_size();
         self.display_hz = window
@@ -316,6 +316,10 @@ impl ApplicationHandler for App {
     }
 
     fn window_event(&mut self, event_loop: &ActiveEventLoop, _id: WindowId, event: WindowEvent) {
+        if !matches!(event, WindowEvent::CloseRequested) && !self.recover_gpu() {
+            event_loop.exit();
+            return;
+        }
         match event {
             WindowEvent::CloseRequested => event_loop.exit(),
             WindowEvent::Focused(false) => {
@@ -495,6 +499,51 @@ impl ApplicationHandler for App {
 }
 
 impl App {
+    /// Restore rendering after a driver reset without rebooting the game.
+    fn recover_gpu(&mut self) -> bool {
+        if !self.gpu_ctx.as_ref().is_some_and(|ctx| ctx.state.is_lost()) {
+            return true;
+        }
+        if !ssx3_ps2::frame_sink::native() {
+            eprintln!("[gpu] device lost in verification renderer; restart required");
+            return false;
+        }
+        eprintln!("[gpu] restoring native renderer after device loss");
+        // A native window can have only one active presentation surface.
+        // Release the lost swapchain before configuring its replacement.
+        self.presenter = None;
+        let Some(window) = self.window.clone() else {
+            return false;
+        };
+        let ctx = match pollster::block_on(ssx3_ps2::gpu::create_context()) {
+            Ok(ctx) => Arc::new(ctx),
+            Err(error) => {
+                eprintln!("[gpu] could not restore device: {error}");
+                return false;
+            }
+        };
+        let Some(renderer) = game::install_renderer_on(&mut self.cpu, &ctx, true) else {
+            return false;
+        };
+        if let Some(old) = self.gfx.as_ref() {
+            renderer.inherit_state(old);
+        }
+        self.presenter = Some(pollster::block_on(Presenter::new(
+            window.clone(),
+            Some(&ctx),
+        )));
+        self.gfx = Some(renderer);
+        self.gpu_ctx = Some(ctx);
+        let size = window.inner_size();
+        self.follow_window_size(size.width, size.height);
+        self.last = Instant::now();
+        self.pacer = ssx3_game::tick::Pacer::default();
+        let game_hz = ssx3_ps2::machine::vsync_hz() as f64 / 1.001;
+        self.pacer.lock_to_display(game_hz, self.display_hz);
+        eprintln!("[gpu] native renderer restored; game state retained");
+        true
+    }
+
     fn trace_frame(&mut self, previous: Instant, run_s: f64, show: Duration, vsyncs: u32) {
         if !self.trace_frames || ssx3_ps2::m!(self.cpu).sched.frames < 450 {
             return;
@@ -519,6 +568,25 @@ impl App {
     fn step(&mut self, event_loop: &ActiveEventLoop) -> bool {
         self.update_pad();
         let alive = ssx3_ps2::machine::run_frame(&mut self.cpu);
+        // Reproducible GPU-loss smoke test; no reset unless explicitly requested.
+        static RESET_FRAME: std::sync::OnceLock<Option<u64>> = std::sync::OnceLock::new();
+        if let Some(frame) = *RESET_FRAME.get_or_init(|| {
+            std::env::var("SSX3_GPU_RESET_FRAME")
+                .ok()
+                .and_then(|v| v.parse::<u64>().ok())
+        }) {
+            static RESET: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+            if ssx3_ps2::m!(self.cpu).sched.frames >= frame
+                && !RESET.swap(true, std::sync::atomic::Ordering::Relaxed)
+            {
+                if let Some(renderer) = self.gfx.as_ref() {
+                    renderer.flush();
+                }
+                if let Some(ctx) = self.gpu_ctx.as_ref() {
+                    ctx.reset();
+                }
+            }
+        }
         if ssx3_ps2::m!(self.cpu).sched.frames % 60 == 0 {
             eprintln!(
                 "[{:6.1}s] {}",
@@ -589,7 +657,7 @@ impl App {
             // GS device: no copy).
             Some(p) if native && self.gfx.is_some() => {
                 let g = self.gfx.as_ref().unwrap();
-                if p.same_device(self.gpu_ctx) {
+                if p.same_device(self.gpu_ctx.as_deref()) {
                     if let Some((view, _, _)) = g.present_view() {
                         let _ = p.render_view(&view);
                     }
@@ -604,7 +672,7 @@ impl App {
             // one) is presented, so the guest never waits for the
             // GS thread to finish the frame it just produced.
             #[cfg(feature = "emu-gs")]
-            Some(p) if p.same_device(self.gpu_ctx) => {
+            Some(p) if p.same_device(self.gpu_ctx.as_deref()) => {
                 let ticket = gs.request_display();
                 let prev = self.pending_display.replace(ticket).unwrap_or(ticket);
                 match gs.take_display(prev) {
