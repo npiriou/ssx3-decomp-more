@@ -1,7 +1,6 @@
 //! Native RailMan_SetRailEnabled (0x00358b28), retained uninstalled.
 //!
-//! Generated EE is the authority. No tests, builds or replays were run:
-//! automated validation is disabled at the user's request.
+//! Generated EE is the authority. No tests, builds or replays were run.
 
 use crate::call::{call_ptr, guest, Frame};
 use crate::events::{deliver_event_here, event_due};

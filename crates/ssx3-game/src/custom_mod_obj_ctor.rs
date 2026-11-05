@@ -1,7 +1,7 @@
 //! Native ModObj constructor (0x00355280), retained uninstalled.
 //!
 //! Generated EE remains the authority for register/cycle/call order. No
-//! automated tests or replays were added or run, at the user's request.
+//! automated tests or replays were added or run.
 
 use crate::call::{call_ptr, guest, Frame};
 use ssx3_ee_rt::cpu::{reg::*, sx};

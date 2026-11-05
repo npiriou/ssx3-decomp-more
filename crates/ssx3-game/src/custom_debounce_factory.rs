@@ -1,7 +1,6 @@
 //! Native `WorldObjFactory_Debounce` (0x002fc7d0), retained uninstalled.
 //!
-//! Generated EE is the authority. No tests or replays were added or run:
-//! automated validation is disabled at the user's request.
+//! Generated EE is the authority. No tests or replays were added or run.
 
 use crate::call::{call_ptr, guest, Frame};
 use crate::events::{deliver_event_here, event_due};

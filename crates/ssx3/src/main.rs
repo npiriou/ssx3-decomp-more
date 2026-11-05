@@ -211,7 +211,8 @@ impl App {
         }
         if self.stick_keys != 0 {
             let axis = |negative, positive| match (
-                self.stick_keys & negative != 0, self.stick_keys & positive != 0,
+                self.stick_keys & negative != 0,
+                self.stick_keys & positive != 0,
             ) {
                 (true, false) => 0,
                 (false, true) => 255,
@@ -375,9 +376,17 @@ impl ApplicationHandler for App {
                             let dir = std::path::PathBuf::from(dir);
                             let frame = ssx3_ps2::m!(self.cpu).sched.frames;
                             let result = std::fs::create_dir_all(&dir).and_then(|_| {
-                                std::fs::write(dir.join(format!("ram-{frame}.bin")), &self.cpu.bus.ram[..])
+                                std::fs::write(
+                                    dir.join(format!("ram-{frame}.bin")),
+                                    &self.cpu.bus.ram[..],
+                                )
                             });
-                            let details = format!("{}\npc={:#x}\nregisters={:?}\n", game::status(&self.cpu), self.cpu.pc, self.cpu.g);
+                            let details = format!(
+                                "{}\npc={:#x}\nregisters={:?}\n",
+                                game::status(&self.cpu),
+                                self.cpu.pc,
+                                self.cpu.g
+                            );
                             let _ = std::fs::write(dir.join(format!("state-{frame}.txt")), details);
                             eprintln!("[debug snapshot] frame {frame}: {result:?}");
                         }
@@ -399,10 +408,11 @@ impl ApplicationHandler for App {
                             #[cfg(not(feature = "emu-gs"))]
                             None => (0, 0),
                         };
-                        let path = format!("/tmp/ssx3-shot-{}.png", self.shots);
+                        let path =
+                            std::env::temp_dir().join(format!("ssx3-shot-{}.png", self.shots));
                         self.shots += 1;
                         let _ = std::fs::write(&path, png::encode(w, h, &self.frame));
-                        eprintln!("screenshot: {path}");
+                        eprintln!("screenshot: {}", path.display());
                     }
                     if let Some(bit) = pad_bit(code) {
                         if event.state == ElementState::Pressed {

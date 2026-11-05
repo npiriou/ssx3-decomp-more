@@ -1,6 +1,6 @@
 //! Native object-script-zero forwarding hook (0x002d1a78), uninstalled.
 //!
-//! No tests or replays were added or run, at the user's request.
+//! No tests or replays were added or run.
 
 use crate::call::{call_ptr, guest, Frame};
 use ssx3_ee_rt::cpu::reg::*;

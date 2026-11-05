@@ -84,7 +84,7 @@ generated. Order:
 
 1. **Finish the running OpenCode wave** (oc23-oc28), gate it (`cargo nextest`,
    5 s per test), integrate what passes, replay, commit. No further bulk
-   OpenCode waves for now (OpenCode tokens are running low).
+   OpenCode waves were scheduled at that stage.
 2. **Name every remaining function** (~2,100 still `FUN_*` in Ghidra, 82%
    named after pass 3): naming pass 4 with Ghidra; re-export
    `generated/functions.tsv`; owner saves Ghidra.

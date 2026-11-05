@@ -680,10 +680,12 @@ impl Driver {
     }
 }
 
-/// EABIG.MPC from the mounted disc, or from the ISO found above the crate.
+/// EABIG.MPC from SSX3_DATA_DIR, SSX3_ISO, or an ISO found above the crate.
 fn load_eabig() -> Option<Vec<u8>> {
-    if let Ok(d) = std::fs::read("/Volumes/SSX3/DATA/MOVIES/EABIG.MPC") {
-        return Some(d);
+    if let Some(root) = std::env::var_os("SSX3_DATA_DIR") {
+        if let Ok(d) = std::fs::read(std::path::Path::new(&root).join("DATA/MOVIES/EABIG.MPC")) {
+            return Some(d);
+        }
     }
     let iso = std::env::var_os("SSX3_ISO")
         .map(std::path::PathBuf::from)

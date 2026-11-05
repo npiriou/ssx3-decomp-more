@@ -1,7 +1,6 @@
 //! Native `WorldObjFactory_DeadNode` (0x002fc2c0), retained uninstalled.
 //!
-//! Generated EE is the authority. No tests or replays were added or run:
-//! automated validation is disabled at the user's request.
+//! Generated EE is the authority. No tests or replays were added or run.
 
 use crate::call::{call_ptr, guest, Flow, Frame};
 use ssx3_ee_rt::cpu::{reg::*, sx};

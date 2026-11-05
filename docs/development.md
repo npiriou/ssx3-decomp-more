@@ -15,8 +15,8 @@ Regenerate after editing `crates/ssx3-game/overrides.txt` (a new override
 slot) or the recompiler. A change to `ssx3-ee-rt` recompiles all generated
 crates (`investigation/crate-split.md`).
 
-**Machine limits (8 GB):** one heavy process at a time: a build (`-j 4`) or
-one headless run, never two runs or a run during a build.
+Run one heavy process at a time: a build or one headless run. Set
+`CARGO_BUILD_JOBS` or use `cargo build -j N` to suit the available memory.
 
 ## Headless runs
 
@@ -72,10 +72,26 @@ the replay for the gate and the scenarios.
 
 `tools/pick_wave.py` (hot functions from a `callprof` profile),
 `tools/refsrc.py` / `refbody.py` / `refdossier2.py` (the matching C++
-decompilation, `~/Desktop/devvydont-ssx3`, by address),
+decompilation by address),
 `tools/integrate_wave.py` (wire, regenerate, test, build, gate). Profile:
 `CARGO_TARGET_DIR=target-prof cargo build --profile game -p ssx3 --bin ssx3-headless --features callprof`,
 then `SSX3_CALLPROF=edges.tsv:5000:5300`.
+
+The reference checkout is optional for playing and building. To use it for
+porting, clone it into the ignored `.refs/` directory:
+
+```sh
+git clone https://github.com/DevvyDont/ssx3.git .refs/devvydont-ssx3
+python3 tools/refindex.py
+```
+
+Set `SSX3_REF` to use a checkout elsewhere. All reference tools share this
+setting and resolve the default relative to the repository, regardless of
+the current directory.
+
+Optional OpenCode delegation (`scripts/delegate.sh`) requires a model selected
+with `--model` or `DELEGATE_MODEL` and a provider configured in OpenCode.
+It has no default provider or automatic fallback to another model.
 
 ## Finding your way through the game
 

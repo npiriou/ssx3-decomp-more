@@ -20,7 +20,7 @@ Debugging aid: `SSX3_EVENT=<code>` (`SSX3_RIDER=<name>`) boots straight into an 
 
 ## Porting loop (typed Rust replacements)
 
-Goal: replace generated EE functions with hand-written Rust, one verified function at a time. `generated/ee` is the authority for registers, cycles, memory and call order; the matching C++ decompilation in `devvydont-ssx3` (if path not known, ask where it is cloned to) is a readability aid (`tools/refsrc.py`, `refbody.py`, `refindex.py`, `refdossier2.py`, `integrate_wave.py`). Also use `overlap-functions.tsv`. 
+Goal: replace generated EE functions with hand-written Rust, one verified function at a time. `generated/ee` is the authority for registers, cycles, memory and call order; the matching C++ decompilation in `.refs/devvydont-ssx3` (or `SSX3_REF`) is a readability aid (`tools/refsrc.py`, `refbody.py`, `refindex.py`, `refdossier2.py`, `integrate_wave.py`). See `docs/development.md` for reference setup. Also use `overlap-functions.tsv`.
 
 ### Orchestrator
 

@@ -77,10 +77,13 @@ fn spu2_voice_plays_adpcm() {
     assert!(v.env.level > 0x4000, "envelope rises: {}", v.env.level);
 }
 
-/// The IRX parser on the real module, when the disc is mounted.
+/// The IRX parser on the real module, when an extracted disc root is configured.
 #[test]
 fn parse_snddrv_if_present() {
-    let Ok(f) = std::fs::read("/Volumes/SSX3/DATA/MODULES/SNDDRV.IRX") else {
+    let Some(root) = std::env::var_os("SSX3_DATA_DIR") else {
+        return;
+    };
+    let Ok(f) = std::fs::read(std::path::Path::new(&root).join("DATA/MODULES/SNDDRV.IRX")) else {
         return;
     };
     let m = irx::load(&f, 0x30000).unwrap();

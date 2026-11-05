@@ -3,7 +3,8 @@
 
     python3 tools/refindex.py [--out FILE]   # default: tools/.refindex.json
 
-Scans `~/Desktop/devvydont-ssx3/src/**/*.cpp` once. For every function it
+Scans `src/**/*.cpp` under the reference root (`SSX3_REF`, default
+`.refs/devvydont-ssx3` in this repository) once. For every function it
 records whether it has a C++ body (inside `#ifdef SKIP_ASM` or otherwise) or
 only `INCLUDE_ASM`. The index lets wave selection ask "does the reference have
 readable source for this address?" without rescanning the tree per address.

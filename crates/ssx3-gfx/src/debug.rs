@@ -35,7 +35,16 @@ pub fn get() -> &'static Dbg {
         let var = |k: &str| std::env::var(k).ok();
         Dbg {
             trace: var("SSX3_GFX_TRACE").and_then(|v| v.parse().ok()),
-            trace_out: var("SSX3_GFX_TRACE_OUT").unwrap_or_else(|| "/tmp/gfx-trace.txt".into()),
+            trace_out: var("SSX3_GFX_TRACE_OUT").unwrap_or_else(|| {
+                if cfg!(target_arch = "wasm32") {
+                    "gfx-trace.txt".into()
+                } else {
+                    std::env::temp_dir()
+                        .join("gfx-trace.txt")
+                        .to_string_lossy()
+                        .into_owned()
+                }
+            }),
             no_flip: var("SSX3_GFX_FLIP").is_some_and(|v| v == "0"),
             path3: var("SSX3_GFX_PATH3")
                 .and_then(|v| v.parse().ok())

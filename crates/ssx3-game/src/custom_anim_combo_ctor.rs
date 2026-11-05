@@ -1,7 +1,7 @@
 //! Native AnimCombo constructor (0x00358c80), retained uninstalled.
 //!
 //! Generated EE is the authority. No tests, replays or builds were added or
-//! run: automated validation is disabled at the user's request.
+//! run.
 
 use crate::abi;
 use crate::call::{call_ptr, guest, Callee, Frame};

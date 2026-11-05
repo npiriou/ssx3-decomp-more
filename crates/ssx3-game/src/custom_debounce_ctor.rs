@@ -1,7 +1,7 @@
 //! Native Debounce construction (0x00342c08), retained uninstalled.
 //!
 //! Generated EE is the authority. No automated tests or replays were added
-//! or run, at the user's request.
+//! or run.
 
 use crate::call::{call_ptr, guest, Frame};
 use ssx3_ee_rt::cpu::{reg::*, sx};

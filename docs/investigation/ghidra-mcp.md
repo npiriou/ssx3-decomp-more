@@ -2,9 +2,9 @@
 
 ## Install
 
-- Ghidra **12.1.4**, user settings dir `~/Library/ghidra/ghidra_12.1.4_PUBLIC`
-  (the Homebrew cask lives in `/opt/homebrew/Cellar/ghidra/12.1.4`).
-- Extensions installed into `.../Extensions/`:
+- Ghidra **12.1.4** was used for the analysis below. Install Ghidra for your
+  platform; it is optional for building and playing.
+- Install these extensions through Ghidra's extension manager:
   - **GhidraMCP** (`com.lauriewired`) — serves the loopback HTTP backend.
   - **ghidra-emotionengine-reloaded** (`chaoticgd`) — adds the R5900 language.
 
@@ -43,29 +43,16 @@ Notes:
 - The backend handles requests on a single dedicated thread; sequential calls
   run ~0.8 ms each (≈10 s for 11,844 `/function` queries).
 
-## OpenCode wiring
+## Optional MCP client
 
-OpenCode V2 config (`~/.config/opencode/opencode.json`) uses `mcp.servers`, not
-`mcpServers`, with a single `command` array and `type: "local"`:
+Configure a local stdio server in your MCP client using this command:
 
-```jsonc
-{
-  "mcp": {
-    "servers": {
-      "ghidra": {
-        "type": "local",
-        "command": ["uvx", "--from", "git+https://github.com/LaurieWired/GhidraMCP",
-                    "ghidra-mcp", "--ghidra-server", "http://127.0.0.1:8080/"],
-        "timeout": { "startup": 120000 }
-      }
-    }
-  }
-}
+```sh
+uvx --from git+https://github.com/LaurieWired/GhidraMCP ghidra-mcp --ghidra-server http://127.0.0.1:8080/
 ```
 
-The raised `startup` timeout covers the first `uvx` clone/build. The MCP tools
-appear as `tools.ghidra.*` and there is **no import/open tool** — importing the
-ELF is a one-time GUI action.
+Allow enough startup time for the first `uvx` clone/build. Importing the ELF
+is a one-time action in Ghidra's GUI.
 
 ## Program state (as analysed)
 

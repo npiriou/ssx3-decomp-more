@@ -16,6 +16,9 @@ hand-written Rust. Rendering, movies, sound, files, controllers and the memory c
 native. No emulator runs the game, and no PS2 graphics, video or audio hardware is
 emulated.
 
+This fork builds on [Anders Fischer-Nielsen's SSX 3 port](https://github.com/andersfischernielsen/ssx3-decomp)
+and adds optional imports of the SSX Tricky courses.
+
 - **Fully playable**: every race and freestyle event, Conquer the Mountain, music, saves.
 - **Native renderer** (wgpu): any resolution and aspect ratio, widescreen and ultrawide
   through the game's own projection, adjustable field of view, texture packs, optional
@@ -47,21 +50,53 @@ Tested on macOS (Apple Silicon) and Windows. On Linux (Ubuntu 24.04) the setup, 
 build work; playing there is untested.
 
 ```sh
-git clone https://github.com/andersfischernielsen/ssx3-decomp.git
-cd ssx3-decomp
+git clone --branch v0.1.0 https://github.com/npiriou/ssx3-decomp-more.git
+cd ssx3-decomp-more
 cp /path/to/your/image.iso "SSX 3 (USA).iso"   # or set SSX3_ISO
 python3 tools/setup.py                         # extract, check, recompile into generated/
 cargo run --profile game -p ssx3
 ```
 
+On Windows, use PowerShell after installing Rust with the MSVC toolchain,
+Python 3, and Visual Studio Build Tools with **Desktop development with C++**:
+
+```powershell
+git clone --branch v0.1.0 https://github.com/npiriou/ssx3-decomp-more.git
+cd ssx3-decomp-more
+# Copy your USA disc image into this folder as "SSX 3 (USA).iso".
+# For an image elsewhere, set $env:SSX3_ISO to its full path first.
+python tools/setup.py
+cargo run --profile game -p ssx3
+```
+
+No reference checkout, Ghidra, AI tools, or developer settings are needed to
+build and play. The game starts with its defaults and creates saves and
+settings locally. F10 opens the settings overlay.
+
 Run `setup.py` again after pulling changes to the recompiler. The first build compiles
-about 55 MB of generated Rust; later builds are incremental. The binary is
+about 55 MB of generated Rust; later builds reuse unchanged crates. The binary is
 `target/game/ssx3`.
 
 **Standalone build.** `python3 tools/bundle.py` packs the game data into a build that runs
 without the ISO or the repository: `dist/SSX3.app` on macOS, one executable on Linux and
 Windows (`tools/bundle/Dockerfile` builds the Linux one anywhere). It contains the game: for
 your own use only, do not share it.
+
+**Optional: SSX Tricky courses.** This fork also imports the eleven playable
+Tricky worlds into Single Event as **Peak Tricky**. After the setup above, place
+your own SSX Tricky (USA, `SLUS_203.26`) image in the repository root as
+`SSX Tricky (USA).iso`, then run:
+
+```sh
+python3 tools/prepare_tricky_tracks.py   # Windows: python instead of python3
+cargo run --profile game -p ssx3
+```
+
+Select **Single Event → Peak Tricky → Race or Freestyle**. Set `SSX_TRICKY_ISO`
+if that image is elsewhere. Imported assets stay local under `.cache/`;
+they are regenerated from each player's discs. See
+[`docs/modding/custom-tracks.md`](docs/modding/custom-tracks.md) for details
+and current limitations.
 
 ## Playing
 

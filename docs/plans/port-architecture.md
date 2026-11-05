@@ -134,5 +134,5 @@ Each step gated by the race replay RAM and the scenario RAMs.
 
 ## Rules
 
-One heavy process at a time (8 GB machine). Commit per step; push `main`
+One heavy process at a time. Commit per step; push `main`
 (and the reorg branch). Game data stays out of git.

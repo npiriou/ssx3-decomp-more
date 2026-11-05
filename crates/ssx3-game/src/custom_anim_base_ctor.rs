@@ -1,6 +1,6 @@
 //! Native AnimObject base constructor (0x0034d9b0), retained uninstalled.
 //!
-//! No automated tests or replays were added or run, at the user's request.
+//! No automated tests or replays were added or run.
 //! Generated EE is the authority for registers, cycles and call order.
 
 use crate::call::{call_ptr, guest, Frame};

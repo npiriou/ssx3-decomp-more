@@ -3,21 +3,25 @@
 The native **Peak Tricky** catalog imports all eleven playable Tricky worlds.
 The eight main courses have Race and Freestyle scenery variants; Untracked
 uses Race, and Pipedream and the Trick Tutorial use Freestyle (19 entries).
-Automated tests and replay gates remain stopped at the user's request.
-Visual development uses the windowed native game.
+Visual development uses the windowed native game. See
+[`../development.md`](../development.md) for verification instructions.
 
 ## Prepare and start
 
 The importer requires the USA PS2 images: SSX 3 `SLUS_207.72` and SSX Tricky
-`SLUS_203.26`. On this machine:
+`SLUS_203.26`. Run from the repository root after completing
+[`../../README.md`](../../README.md)'s setup:
 
 ```powershell
-cd X:\dev\ssx3-decomp-more
-$env:SSX3_ISO = 'X:\dev\ssx3\SSX 3 (USA).iso'
-$env:SSX_TRICKY_ISO = 'X:\dev\SSX Tricky (USA).iso'
+$env:SSX3_ISO = (Resolve-Path './SSX 3 (USA).iso').Path
+$env:SSX_TRICKY_ISO = (Resolve-Path './SSX Tricky (USA).iso').Path
 python tools/prepare_tricky_tracks.py
 cargo run --profile game -p ssx3
 ```
+
+Place both images in the repository root with the names above, or set the
+variables to their actual locations. On macOS/Linux, use `export NAME=value`
+instead of PowerShell's `$env:NAME = value`, and `python3` instead of `python`.
 
 Select a character, then **Single Event -> Peak Tricky -> Race or Freestyle**.
 The course list uses the original Tricky names. `prepare_bonus_tracks.py`
@@ -55,8 +59,7 @@ Remove-Item Env:SSX3_EVENT
 ```
 
 All derived resources stay ignored under `.cache/`. Neither ISO nor extracted
-EA assets belong in Git. The project-root SSX 3 image is a hard link to the
-image under `X:\dev\ssx3`.
+EA assets belong in Git.
 
 ## Runtime architecture
 
@@ -359,6 +362,6 @@ logical section tables.
 reference (GPL-3.0), particularly its Tricky BD/LTG/SSF readers and PS2 world
 resource readers. Its checkout is ignored under `.refs/`; no library source
 is copied into the runtime. The [DevvyDont C++ reference](https://github.com/DevvyDont/ssx3)
-is available under `.refs/devvydont-ssx3` for readable comparisons. Generated
+can be cloned into `.refs/devvydont-ssx3` for readable comparisons. Generated
 EE remains the authority for the hand-written Rust ports. No EA resource or
 original binary is committed.

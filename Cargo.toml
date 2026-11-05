@@ -27,7 +27,7 @@ members = [
 version = "0.1.0"
 edition = "2021"
 license = "MIT"
-repository = "https://github.com/andersfischernielsen/ssx3-decomp"
+repository = "https://github.com/npiriou/ssx3-decomp-more"
 
 [workspace.dependencies]
 ssx3-core = { path = "crates/ssx3-core" }

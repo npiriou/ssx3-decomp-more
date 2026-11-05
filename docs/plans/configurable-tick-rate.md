@@ -198,8 +198,8 @@ physics loop.
 ## Fast at 240 Hz (baseline, before T1/T2/T3)
 
 `python3 tools/tick_ab.py 240` on the 2026-10-23 baseline (two headless runs
-of the same race input, 60 Hz left and 240 Hz right at matched real time;
-sheets in `/tmp/ssx3-tick-ab-240/sheet*.png`). The 240 Hz run is still in the
+of the same race input, 60 Hz left and 240 Hz right at matched real time).
+The 240 Hz run is still in the
 front end when the 60 Hz run reaches the race, so each row also tells where
 the two runs are in the sequence.
 
@@ -211,8 +211,7 @@ the two runs are in the sequence.
 | Rider physics, speed | right: speeds and progress match (55 MPH both; drag/friction follow the step) | `sheet4`-`sheet5` |
 | HUD and effects | not separable yet: the front-end offset puts the two runs at different points of the course; re-check after the front end is fixed | — |
 
-**Fixed by the first T1/T2/T3 waves** (`tools/tick_ab.py 240`,
-`/tmp/ssx3-tick-ab-240-t2/sheet*.png`):
+**Fixed by the first T1/T2/T3 waves** (`tools/tick_ab.py 240`):
 
 | System | Before | Now |
 | --- | --- | --- |
@@ -237,7 +236,7 @@ refresh/poll/retry/fade/credits timers.
 
 ### Measured after the T3 waves (all three rates)
 
-`python3 tools/tick_ab.py HZ` for 240, 120 and 144 (`/tmp/ssx3-tick-final-*`):
+`python3 tools/tick_ab.py HZ` for 240, 120 and 144:
 
 | rate | menu/title flow | race clock offset | course % | speed |
 | --- | --- | --- | --- | --- |
@@ -245,8 +244,8 @@ refresh/poll/retry/fade/credits timers.
 | 144 | in lockstep | ~1 s, constant | tracks within 1 % | 55 vs 50 MPH (the 144 Hz run is airborne there) |
 | 240 | in lockstep | ~2 s, constant (now 0, see below) | tracks within 1-2 % (4/6, 7/8, 8/10, 11/12, 13/14, 21/21 %) | 53/55, 47/55, 53/55 MPH |
 
-Re-measured after the porting follow-up (`/tmp/ssx3-tick-port-120`,
-`/tmp/ssx3-tick-port-240`): unchanged — 120 Hz clock 0:02 vs 0:01, course 1/3 %
+Re-measured after the porting follow-up at 120 and 240 Hz:
+unchanged — 120 Hz clock 0:02 vs 0:01, course 1/3 %
 at the start and 13/14, 15/16, 18/18, 21/21 % at 240 Hz, 55 MPH both. The ports
 did not change the replay (the gate is identical) and the two conversions
 (vibration timers, UV scroll) do not run in the race replay.

@@ -1,7 +1,6 @@
 //! Native Debounce contact callback (0x003614f8), retained uninstalled.
 //!
-//! Generated EE is the authority. No tests or replays were added or run,
-//! at the user's request.
+//! Generated EE is the authority. No tests or replays were added or run.
 
 use crate::abi;
 use ssx3_ee_rt::funcs::GuestFn;

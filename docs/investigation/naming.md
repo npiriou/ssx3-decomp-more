@@ -1617,7 +1617,7 @@ The remaining 3,215 pass-2 names (previously `FUN_`) are in `generated/functions
 
 ## Recovery after a Ghidra crash (2026-10-15)
 
-The Ghidra project on disk (`~/Desktop/ssx3-ghidra/SSX 3.gpr`) had last been
+The local Ghidra project had last been
 saved right after import (2026-10-13 17:30), so a crash lost the analysis and
 all renames. Re-running auto-analysis reproduced exactly the 11,844 function
 starts of `generated/functions.tsv`, and `tools/import-ghidra-names.py`

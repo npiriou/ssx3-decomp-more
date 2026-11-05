@@ -1,7 +1,6 @@
 //! Native WorldObjFactory_MeshAnim (0x002fcff0), retained uninstalled.
 //!
-//! Generated EE is the authority. No tests or replays were added or run:
-//! automated tests are disabled at the user's request.
+//! Generated EE is the authority. No tests or replays were added or run.
 
 use crate::call::{call_ptr, guest, Frame};
 use crate::events::{deliver_event_here, event_due};

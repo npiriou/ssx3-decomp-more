@@ -3,7 +3,7 @@
 //! Despite the historical name, this is not a read-only resource lookup.
 //! It appends a hull reference, calls the chunk resolver, and stores its
 //! compressed pointer while retaining the table entry's reference count.
-//! Kept uninstalled; no tests/build were run at the user's request.
+//! Kept uninstalled; no tests/build were run.
 //!
 //! Read-only Instance lookup (does not call this callback):
 //! `app = *(0x4a28a8)`, `module = *(app+0x84)`, `world = *(module+0x10)`,

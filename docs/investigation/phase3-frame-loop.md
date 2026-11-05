@@ -51,7 +51,7 @@ The limit is simple: skipping cycles keeps time real-time only if the host has s
 speed. Every skipped cycle is time the guest did not run, so CPU-bound phases such as loading
 slow down in game terms.
 
-On this machine the guest runs faster than real time in menus (about 9×) and races (about
+In the recorded benchmark the guest runs faster than real time in menus (about 9×) and races (about
 1.4×), so the mode rarely triggers. When it does (a heavy moment in a race), music and the
 race clock stay real-time and the game drops renders.
 

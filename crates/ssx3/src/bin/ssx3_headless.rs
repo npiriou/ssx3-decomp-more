@@ -56,7 +56,12 @@ fn main() {
         .ok()
         .and_then(|v| v.parse().ok())
         .unwrap_or(0);
-    let shot_dir = std::env::var("SSX3_SHOTS").unwrap_or_else(|_| "/tmp/ssx3-shots".into());
+    let shot_dir = std::env::var("SSX3_SHOTS").unwrap_or_else(|_| {
+        std::env::temp_dir()
+            .join("ssx3-shots")
+            .to_string_lossy()
+            .into_owned()
+    });
     let _ = std::fs::create_dir_all(&shot_dir);
 
     // Headless runs do not open the audio device unless asked (SSX3_AUDIO=1);

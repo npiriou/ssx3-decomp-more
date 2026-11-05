@@ -12,6 +12,14 @@
 # OS
 .DS_Store
 
+# Personal environment and editor settings
+/.env
+/.env.*
+!/.env.example
+!/.env.*.example
+/.vscode/
+/.idea/
+
 # Large originals: keep the extracted ELF, ignore the disc image itself
 *.iso
 

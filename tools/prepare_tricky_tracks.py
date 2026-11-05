@@ -21,7 +21,7 @@ def main() -> None:
     parser.add_argument("--ssx3-iso", type=Path,
                         default=Path(os.environ.get("SSX3_ISO", root / "SSX 3 (USA).iso")))
     parser.add_argument("--tricky-iso", type=Path,
-                        default=Path(os.environ.get("SSX_TRICKY_ISO", root.parent / "SSX Tricky (USA).iso")))
+                        default=Path(os.environ.get("SSX_TRICKY_ISO", root / "SSX Tricky (USA).iso")))
     parser.add_argument("--overlay", type=Path, default=root / ".cache/overlay")
     parser.add_argument("--course", action="append", help="Course ID or disc code; all by default")
     parser.add_argument("--force", action="store_true")

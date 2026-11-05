@@ -1,8 +1,7 @@
 //! Native WorldObjFactory_AnimObject (0x002fbcb8).
 //!
 //! Used by Tricky object effects through the native world process system.
-//! No tests were added or run: automated tests and replays are
-//! disabled at the user's request. Generated EE is the authority.
+//! No tests were added or run. Generated EE is the authority.
 
 use crate::call::{call_ptr, guest, Frame};
 use crate::events::{deliver_event_here, event_due};

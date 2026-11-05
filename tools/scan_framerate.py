@@ -25,9 +25,10 @@ import re
 import struct
 import sys
 
+from refsrc import REF
+
 ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
 ELF = os.path.join(ROOT, "orig/SLUS_207.72")
-REF = os.environ.get("SSX3_REF", os.path.expanduser("~/Desktop/devvydont-ssx3"))
 
 FLOATS = {
     0x3C888889: "1/60",

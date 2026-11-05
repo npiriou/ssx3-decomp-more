@@ -55,7 +55,7 @@ compare the two `SSX3_FILE_LOG` logs (2026-10-15):
   order differs, because native reads complete sooner.
 - **Race:** the native run reaches the same race at the same time. Frame 5000 shows the same
   scene with small rider position differences, from load timing.
-- **Source:** a run from a mounted copy of the disc (`SSX3_DATA_DIR=/Volumes/SSX3`) is
+- **Source:** a run from a mounted copy of the disc (configured with `SSX3_DATA_DIR`) is
   byte-identical to a run from the image at frame 5000. Native runs are deterministic.
 - **Full race:** to frame 9000, both runs complete the race with no misses and no halts. 1,021 distinct reads are common to both, with 0 content mismatches. The roughly 30 reads seen in only one run are music-stream positions and speech lines, which differ because play diverged slightly.
 - **Emulated CD traffic:** 2,101 `sceCdRead` RPCs in the emulated run, 20 single sectors in

@@ -252,7 +252,7 @@ def main() -> None:
     root = Path(__file__).resolve().parent.parent
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--tricky-iso", type=Path, default=Path(os.environ.get(
-        "SSX_TRICKY_ISO", root.parent / "SSX Tricky (USA).iso")))
+        "SSX_TRICKY_ISO", root / "SSX Tricky (USA).iso")))
     parser.add_argument("--overlay", type=Path, default=root / ".cache/overlay")
     parser.add_argument("--output", type=Path, default=root / ".cache/tricky-mechanics-audit.json")
     args = parser.parse_args()

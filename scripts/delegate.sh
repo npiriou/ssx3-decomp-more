@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
-# Delegate a mechanical task to a cheap model via OpenCode (one worker per call).
+# Delegate a mechanical task to a configured model via OpenCode (one worker per call).
 #
 #   scripts/delegate.sh [--write | --here] [--model M] [--json] <task-name> <prompt | @prompt-file>
 #   scripts/delegate.sh --cleanup <task-name>      # remove worktree + branch
+# Select a model with --model or DELEGATE_MODEL; configure its provider in OpenCode.
 #
 # Every run uses --auto (permissions not explicitly denied are approved;
 #   a non-interactive run can't answer prompts).
@@ -18,8 +19,7 @@
 set -euo pipefail
 
 root="$(git rev-parse --show-toplevel)"
-model="${DELEGATE_MODEL:-ollama/deepseek-v4.1-flash:cloud}"
-fallback_model="ollama-cloud/deepseek-v4.1-flash"
+model="${DELEGATE_MODEL:-}"
 timeout="${DELEGATE_TIMEOUT:-1200}"   # seconds per worker
 write=0 json=0
 
@@ -45,12 +45,14 @@ name="${1:?task name}"; prompt="${2:?prompt or @file}"
 [[ "$name" =~ ^[A-Za-z0-9._-]+$ ]] || { echo "task name must be [A-Za-z0-9._-]+" >&2; exit 2; }
 if [[ "$prompt" == @* ]]; then prompt="$(cat "${prompt#@}")"; fi
 
-# The provider list changes (e.g. the local `ollama/` provider disappearing
-# while `ollama-cloud/` stays): use the requested model only if OpenCode lists
-# it, else the fallback.
+if [[ -z "$model" ]]; then
+  echo "delegate: select an OpenCode model with --model or DELEGATE_MODEL" >&2
+  exit 2
+fi
+
 if ! opencode models 2>/dev/null | grep -qxF "$model"; then
-  echo "delegate: model $model not listed by OpenCode, using $fallback_model" >&2
-  model="$fallback_model"
+  echo "delegate: model $model is not listed by OpenCode; configure its provider or select another model" >&2
+  exit 2
 fi
 
 logdir="$root/.delegate/logs"; mkdir -p "$logdir"

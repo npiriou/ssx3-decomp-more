@@ -1,6 +1,6 @@
 //! Native AnimObject constructor (0x00341aa0).
 //!
-//! No automated tests or replays were added or run, at the user's request.
+//! No automated tests or replays were added or run.
 //! Generated EE is the authority for the guest ABI and operation order.
 
 use crate::abi;

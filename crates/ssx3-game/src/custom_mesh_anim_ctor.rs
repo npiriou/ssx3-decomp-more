@@ -1,6 +1,6 @@
 //! Native MeshAnim constructor (0x00351b40), retained uninstalled.
 //!
-//! No automated tests or replays were added or run, at the user's request.
+//! No automated tests or replays were added or run.
 //! Generated EE is the authority for registers, cycles and call order.
 
 use crate::call::{call_ptr, guest, Flow, Frame};

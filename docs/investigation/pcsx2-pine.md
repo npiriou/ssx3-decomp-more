@@ -1,6 +1,6 @@
 # PCSX2 as a reference oracle (PINE)
 
-PCSX2 v2.8.2 (installed at `/Applications/PCSX2.app`) runs the same disc and is
+PCSX2 v2.8.2 runs the same disc and is
 the behavioural reference. It has no remote debug server; its only remote
 interface is **PINE** (Settings → Advanced → Enable PINE; it starts when a game
 boots). On macOS it is a Unix socket: `$TMPDIR/pcsx2.sock`.

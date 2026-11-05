@@ -13,15 +13,16 @@ Usage:
   python3 tools/refsrc.py 0x00122278 [more addresses...]
   python3 tools/refsrc.py --tsv file.tsv     # first column = address
 
-The reference root defaults to ``~/Desktop/devvydont-ssx3`` (override with
-SSX3_REF=/path).
+The reference root defaults to ``.refs/devvydont-ssx3`` in this repository
+(override with SSX3_REF=/path/to/reference).
 """
 import os
 import re
 import subprocess
 import sys
 
-REF = os.environ.get("SSX3_REF", os.path.expanduser("~/Desktop/devvydont-ssx3"))
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+REF = os.path.expanduser(os.environ.get("SSX3_REF", os.path.join(ROOT, ".refs", "devvydont-ssx3")))
 
 SYMBOL_RE = re.compile(r"^(\S+)\s*=\s*(0x[0-9A-Fa-f]+)\s*;", re.M)
 

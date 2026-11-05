@@ -97,7 +97,7 @@ The changes to `hw.rs` are small and only touch the IPU paths:
 - a full DMA round trip through `Hw` (ch4 source chain → BDEC → ch3, D_STAT and INTC);
 - `eabig_i_frames_decode`.
 
-`eabig_i_frames_decode` reads `EABIG.MPC` from `/Volumes/SSX3`, `$SSX3_ISO`
+`eabig_i_frames_decode` reads `EABIG.MPC` from `$SSX3_DATA_DIR`, `$SSX3_ISO`
 or `SSX 3 (USA).iso` in a parent directory, and skips if none is found. A
 libmpeg-style driver parses headers through FDEC/VDEC only, decodes each
 I-picture with BDEC + CSC and again with IDEC, and asserts that both

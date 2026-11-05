@@ -1,8 +1,7 @@
 //! Native WorldObjFactory_AnimDelta (0x002fb060).
 //!
 //! Retained uninstalled while Tricky object effects are connected to native
-//! world objects. No tests were added or run: automated tests and replays are
-//! disabled at the user's request. Generated EE is the authority.
+//! world objects. No tests were added or run. Generated EE is the authority.
 
 use crate::call::{call_ptr, guest, Frame};
 use crate::events::{deliver_event_here, event_due};

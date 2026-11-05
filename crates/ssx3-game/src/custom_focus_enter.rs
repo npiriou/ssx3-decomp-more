@@ -1,6 +1,6 @@
 //! Native focus-entry object callback (0x0030a3a0), retained uninstalled.
 //!
-//! No automated tests or replays were added or run, at the user's request.
+//! No automated tests or replays were added or run.
 
 use crate::call::{call_ptr, guest, Frame};
 use ssx3_ee_rt::cpu::{reg::*, sx};

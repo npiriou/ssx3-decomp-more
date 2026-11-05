@@ -17,11 +17,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - name: Check that no disc, executable or translated code is tracked
+      - name: Check that no game material or local runtime files are tracked
         run: |
-          bad=$(git ls-files | grep -Ei '\.iso$|^orig/|^generated/(ee|ee-unwind|iop|vu)/|SLUS_207\.72|(^|/)(ram|vram)[^/]*\.bin$' || true)
+          bad=$(git ls-files | grep -Ei '\.iso$|^orig/|^generated/(ee|ee-unwind|iop|vu)/|^(\.cache|\.refs|saves|textures|dist|target[^/]*)/|SLUS_207\.72|(^|/)(ram|vram)[^/]*\.bin$' || true)
           if [ -n "$bad" ]; then
-            echo "::error::These files come from the game and must not be committed:"
+            echo "::error::Game material and local runtime files must not be committed:"
             echo "$bad"
             exit 1
           fi

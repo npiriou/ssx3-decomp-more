@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Race replay at 60 Hz and at N Hz, screenshots side by side at matched real time.
 
-    python3 tools/tick_ab.py [HZ] [OUT]      # default 120, scratch dir under /tmp
+    python3 tools/tick_ab.py [HZ] [OUT]      # default 120, scratch dir under the OS temp directory
 
 Runs ./target/game/ssx3-headless twice (one heavy process at a time): the
 gate's race input at 60 Hz, then with SSX3_TICK_HZ=HZ and the input's frame
@@ -14,6 +14,7 @@ effects, AI riders). Build first: cargo build --profile game -p ssx3 --bins.
 import os
 import subprocess
 import sys
+import tempfile
 
 from PIL import Image
 
@@ -22,7 +23,7 @@ import integrate_wave  # noqa: E402
 
 ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
 HZ = int(sys.argv[1]) if len(sys.argv) > 1 else 120
-OUT = sys.argv[2] if len(sys.argv) > 2 else f"/tmp/ssx3-tick-ab-{HZ}"
+OUT = sys.argv[2] if len(sys.argv) > 2 else os.path.join(tempfile.gettempdir(), f"ssx3-tick-ab-{HZ}")
 FRAMES, EVERY = 7000, 250
 
 

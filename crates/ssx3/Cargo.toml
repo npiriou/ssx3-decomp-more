@@ -1,5 +1,6 @@
 [package]
 name = "ssx3"
+default-run = "ssx3"
 description = "SSX 3 (USA) native recompilation — entry point."
 version.workspace = true
 edition.workspace = true

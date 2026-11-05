@@ -1,7 +1,6 @@
 //! Native finish notification, timestamps and rider-local post-finish timer.
 //!
-//! Retained as an uninstalled port. No differential tests were added or run:
-//! automated tests and replays are disabled at the user's request.
+//! Retained as an uninstalled port. No differential tests were added or run.
 
 use crate::call::{call_ptr, guest, Callee, Frame};
 use ssx3_ee_rt::cpu::{reg::*, sx};

@@ -1,6 +1,6 @@
 # T5 classification brief (the whole game)
 
-You are a SUBAGENT doing analysis only in /Users/fischer/Desktop/ssx3-decomp
+You are a SUBAGENT doing analysis only in the repository root
 (a native Rust port of PS2 SSX 3). Do not run cargo or the game, do not edit
 any file except your one output file, do not commit.
 

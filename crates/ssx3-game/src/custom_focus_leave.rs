@@ -1,6 +1,6 @@
 //! Native WScriptMan_FocusLeave (0x0030a460), retained uninstalled.
 //!
-//! No automated tests or replays were added or run, at the user's request.
+//! No automated tests or replays were added or run.
 //! Generated EE is the authority for registers, cycles and call ordering.
 
 use crate::call::{call_ptr, guest, Frame};
