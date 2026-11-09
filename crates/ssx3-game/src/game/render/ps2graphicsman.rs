@@ -753,6 +753,18 @@ pub fn tex_man_alloc_btex_info(c: &mut Cpu) {
 /// `TexMan_FreeNBTexInfo(TexMan* self, int id)` (0x3671c8): free texture
 /// slot `id` and push it onto the free list, then drop the live count.
 pub fn tex_man_free_nb_tex_info(c: &mut Cpu) {
+    free_nb_tex_info(c, crate::custom_tracks::world_texture_slots());
+}
+
+fn free_nb_tex_info(c: &mut Cpu, world_slots: u32) {
+    // TexMan_FreeTexture still dispatches using the retail boundary. The
+    // extended world slots have bound TexInfos and must not enter the
+    // dynamic free list when a world unloads or releases a texture.
+    if (1500..world_slots).contains(&r32(c, A1)) {
+        c.pc = 0x0036_72c0;
+        tex_man_free_btex_info(c);
+        return;
+    }
     guest(c, |c| {
         c.cycles += 25;
         let frame = Frame::open(c, 0x40);
@@ -1941,6 +1953,30 @@ pub(crate) mod tests {
                 c.bus
                     .write32(DATA + 0x800 + 0x1f48, DATA + 0x500 + 8 * (seed % 4));
                 c.bus.write32(DATA + 0x800 + 4, r.next_u32());
+            },
+        );
+    }
+
+    #[test]
+    fn tex_man_free_imported_world_slot_matches_bound_release() {
+        const WORLD_SLOTS: u32 = 1664;
+        check(
+            ee::s12::f_003672c0__generated,
+            |c| free_nb_tex_info(c, WORLD_SLOTS),
+            12,
+            &|c, seed| {
+                let mut r = machine(c, seed, 0x3672_c0, 1);
+                alloc_ready(c);
+                let this = DATA + 0x100;
+                let slot = [1500, 1656, WORLD_SLOTS - 1][(seed % 3) as usize];
+                let free_head = this + 8 + 4 * WORLD_SLOTS;
+                c.bus.write32(this, r.next_u32());
+                c.bus.write32(this + 4, r.next_u32());
+                c.bus.write32(this + 8 + slot * 4, DATA + 0x1_1000);
+                c.bus.write32(this + 0x1f48, free_head);
+                c.bus.write32(free_head, free_head + 4);
+                c.g[A0][0] = sx(this);
+                c.g[A1][0] = u64::from(slot);
             },
         );
     }
