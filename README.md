@@ -167,28 +167,6 @@ cargo run --profile game -p ssx3
 is cheap. Run it after every update anyway, since releases sometimes fix how courses are
 converted. The release notes say when that matters.
 
-## Known issues
-
-This is a work in progress. The courses load and play from start to finish, but not
-everything from Tricky is reproduced yet:
-
-- **Your times on Tricky courses aren't saved.** Results show at the finish, but nothing goes
-  to the leaderboards or your career.
-- **The camera sometimes clips into scenery** in tight spots, for example Mesablanca's wooden
-  boardwalk and Alaska's ice portal.
-- **Untracked's race start can look broken**: the rider pack overlaps at the gate.
-- **Some rails don't always catch** on Elysium Alps and on Alaska's ice ledges.
-- **Some breakable glass shortcuts** don't always break.
-- **"Next Event" into Pipedream Freestyle can hang** on the loading screen. Quit to the menu
-  and pick it from Peak Tricky instead.
-- It's **SSX 3's gameplay on Tricky's courses**. Riders, physics, tricks, ubers and AI are
-  SSX 3's; Tricky's rider roster and trick system aren't imported.
-- The standalone build made by `tools/bundle.py` only packs SSX 3, not the Tricky courses. Play
-  from the repository folder.
-
-Found something else? When you report it, say which course and mode, and roughly where it
-happened.
-
 ## Credits
 
 - **[Anders Fischer-Nielsen](https://github.com/andersfischernielsen)** and the
