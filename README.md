@@ -1,181 +1,207 @@
-# SSX 3, decompiled
+# SSX 3 × SSX Tricky courses
 
-[![SSX 3 running natively: title screen, mode select, race start and three moments of a Snow Jam race](docs/images/screenshots.jpg)](docs/ssx3.mp4)
+[![Trailer: the SSX Tricky courses running in SSX 3. Garibaldi start, Alaska, Snowdream, Untracked, Aloha Ice Jam, Mesablanca, Merqury City, Pipedream and Elysium Alps](docs/images/tricky/trailer-mosaic.jpg)](docs/ssx-tricky-trailer.mp4)
 
-▶ **[Video](docs/ssx3.mp4)**
+▶ **[Watch the trailer](docs/ssx-tricky-trailer.mp4)** (no sound)
 
-> SSX 3 is © Electronic Arts; "SSX" is an EA trademark. This project is not affiliated
-> with or endorsed by EA. **The repository contains no game data and no game code.** The
-> disc image, the executable and everything translated from them (`orig/`, `generated/`)
-> are produced locally from **your own copy** of the game, are ignored by git, and must
-> never be committed or shared.
+**The SSX Tricky courses, playable in SSX 3.** Ride Garibaldi, Snowdream, Elysium Alps,
+Mesablanca, Merqury City Meltdown, Tokyo Megaplex, Aloha Ice Jam, Alaska, Untracked,
+Pipedream and the Trick Tutorial with SSX 3's riders, tricks, ubers and physics. Each course
+keeps its original terrain, textures, lighting, sky, rails, shortcuts, moving props, crowds,
+video screens and fireworks.
 
-A native **Rust** port of **SSX 3 (USA)** (`SLUS_207.72`, PlayStation 2). The game's code
-was statically recompiled to Rust and is being replaced, function by function, with
-hand-written Rust. Rendering, movies, sound, files, controllers and the memory card are
-native. No emulator runs the game, and no PS2 graphics, video or audio hardware is
-emulated.
+The game runs natively on your PC. It is not an emulator and not a disc patch. You build it
+from source, using your own copies of both games.
 
-This fork builds on [Anders Fischer-Nielsen's SSX 3 port](https://github.com/andersfischernielsen/ssx3-decomp)
-and adds optional imports of the SSX Tricky courses.
+> **Credit where it's due.** The hard part, porting SSX 3 to native Rust, is
+> **[Anders Fischer-Nielsen's ssx3-decomp](https://github.com/andersfischernielsen/ssx3-decomp)**,
+> with contributions from its community. This fork **only adds the SSX Tricky courses** and the
+> fixes they needed. Go star the original.
 
-- **Fully playable**: every race and freestyle event, Conquer the Mountain, music, saves.
-- **Native renderer** (wgpu): any resolution and aspect ratio, widescreen and ultrawide
-  through the game's own projection, adjustable field of view, texture packs, optional
-  modern graphics (AA, AO, bloom, draw distance).
-- **Configurable game rate** (60/120/144/240 Hz), with no interpolation.
-- **5,210 of 11,844 functions are hand-written Rust** (about 90% of a race's per-frame
-  work), each checked against the recompiled original. Every function is named.
-- **Runs on macOS and Windows**, builds on Linux, plus an experimental browser build ([`crates/ssx3-web`](crates/ssx3-web/README.md)).
+> SSX 3 and SSX Tricky are © Electronic Arts; "SSX" is an EA trademark. This project is not
+> affiliated with or endorsed by EA. **This repository contains no game data and no game
+> code.** Everything game-related is generated on your machine from **your own discs**, is
+> ignored by git, and must never be shared.
 
-The guest memory, the EE kernel's threads (coroutines on one host thread) and VU0 macro ops
-are still PS2-shaped; see [`docs/plans/roadmap.md`](docs/plans/roadmap.md) and
-[known limitations](docs/investigation/limitations.md).
+## The courses
 
-![Snow Jam at 2560x1080](docs/images/ultrawide.jpg)
-![Metro City at night at 1920x1080](docs/images/metro-city-night.jpg)
+All of them are under **Single Event → Peak Tricky**: 19 events in total.
 
-## Getting started
+| | Course | Modes |
+| --- | --- | --- |
+| <img src="docs/images/tricky/garibaldi.jpg" alt="Garibaldi" width="320"> | **Garibaldi** | Race, Freestyle |
+| <img src="docs/images/tricky/snowdream.jpg" alt="Snowdream" width="320"> | **Snowdream** | Race, Freestyle |
+| <img src="docs/images/tricky/elysium.jpg" alt="Elysium Alps" width="320"> | **Elysium Alps** | Race, Freestyle |
+| <img src="docs/images/tricky/mesablanca.jpg" alt="Mesablanca" width="320"> | **Mesablanca** | Race, Freestyle |
+| <img src="docs/images/tricky/mercury-city.jpg" alt="Merqury City Meltdown" width="320"> | **Merqury City Meltdown** | Race, Freestyle |
+| | **Tokyo Megaplex** (the tube loop sends you around 3 laps) | Race, Freestyle |
+| <img src="docs/images/tricky/aloha.jpg" alt="Aloha Ice Jam" width="320"> | **Aloha Ice Jam** | Race, Freestyle |
+| <img src="docs/images/tricky/alaska.jpg" alt="Alaska" width="320"> | **Alaska** | Race, Freestyle |
+| <img src="docs/images/tricky/untracked.jpg" alt="Untracked" width="320"> | **Untracked** | Race |
+| <img src="docs/images/tricky/pipedream.jpg" alt="Pipedream" width="320"> | **Pipedream** | Freestyle |
+| | **Trick Tutorial** | Freestyle (untimed) |
 
-**You need:**
-- **A disc image of SSX 3 (USA)** (`SLUS-20772`, Redump `SSX 3 (USA)`, about 3 GB) made
-  from a disc you own. Other regions are not supported; setup checks the executable's
-  SHA-256 (`1b49d05ca2793922180851b9e1ce9ae2291d61a7863565ac4e71f12e967af7bc`).
-- **Rust** (stable, via [rustup](https://rustup.rs)) and **Python 3**.
-- A GPU with Metal, Vulkan or DX12, and about 7 GB of disk.
-- On Linux: `pkg-config`, `libasound2-dev`, `libudev-dev`. On Windows: the MSVC toolchain
-  (not WSL).
+- **Race**: you against five SSX 3 riders, who follow routes converted from Tricky's own
+  racing lines. Countdown, knockdowns, checkpoints and results work as in SSX 3.
+- **Freestyle**: a solo trick run with SSX 3's slopestyle scoring, using Tricky's Showoff
+  timers. Checkpoints add time. The ×2, ×3 and ×5 multiplier gems are placed where Tricky had them.
 
-Tested on macOS (Apple Silicon) and Windows. On Linux (Ubuntu 24.04) the setup, tests and
-build work; playing there is untested.
+![Aloha Ice Jam, GAP jump over the city](docs/images/tricky/aloha-city.jpg)
 
-```sh
-git clone --branch v0.1.1 https://github.com/npiriou/ssx3-decomp-more.git
-cd ssx3-decomp-more
-cp /path/to/your/image.iso "SSX 3 (USA).iso"   # or set SSX3_ISO
-python3 tools/setup.py                         # extract, check, recompile into generated/
-cargo run --profile game -p ssx3
-```
+## What you need
 
-On Windows, use PowerShell after installing Rust with the MSVC toolchain,
-Python 3, and Visual Studio Build Tools with **Desktop development with C++**:
+- **Your own disc images**, both **USA** versions:
+  - **SSX 3 (USA)**: `SLUS-20772`, about 3 GB. Setup checks it, so other regions won't work.
+  - **SSX Tricky (USA)**: `SLUS-20326`.
+- **Windows 10/11**, where the Tricky courses are developed and tested. SSX 3 itself also runs
+  on **macOS** (Apple Silicon), but the Tricky courses haven't been tried there yet. Linux
+  builds, but playing on it is untested.
+- A GPU with **DirectX 12, Vulkan or Metal**.
+- About **10 GB** of free disk space (the game build plus the converted courses).
+- The build tools, all free:
+  - **[Git](https://git-scm.com/downloads)**
+  - **[Python 3](https://www.python.org/downloads/)** (on Windows, tick "Add python.exe to PATH")
+  - **[Rust](https://rustup.rs)** (the default "stable" install)
+  - **Windows only:** [Visual Studio Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/)
+    with the **Desktop development with C++** workload. Rust needs it.
+
+## Install
+
+### Windows
+
+Open **PowerShell** and run these one at a time:
 
 ```powershell
-git clone --branch v0.1.1 https://github.com/npiriou/ssx3-decomp-more.git
+git clone --branch v0.1.2 https://github.com/npiriou/ssx3-decomp-more.git
 cd ssx3-decomp-more
-# Copy your USA disc image into this folder as "SSX 3 (USA).iso".
-# For an image elsewhere, set $env:SSX3_ISO to its full path first.
+```
+
+Copy your two disc images into that `ssx3-decomp-more` folder and name them exactly
+**`SSX 3 (USA).iso`** and **`SSX Tricky (USA).iso`**. Then:
+
+```powershell
 python tools/setup.py
+python tools/prepare_tricky_tracks.py
 cargo run --profile game -p ssx3
 ```
 
-No reference checkout, Ghidra, AI tools, or developer settings are needed to
-build and play. The game starts with its defaults and creates saves and
-settings locally. F10 opens the settings overlay.
+1. `setup.py` reads your SSX 3 disc, checks it and generates the game's code.
+2. `prepare_tricky_tracks.py` converts the 19 Tricky course variants from your Tricky disc.
+   This takes a while the first time.
+3. `cargo run` compiles and launches the game. **The first compile is long**, because there is
+   a lot of generated code. Later launches are quick.
 
-Run `setup.py` again after pulling changes to the recompiler. The first build compiles
-about 55 MB of generated Rust; later builds reuse unchanged crates. The binary is
-`target/game/ssx3`.
+### macOS (and Linux)
 
-**Standalone build.** `python3 tools/bundle.py` packs the game data into a build that runs
-without the ISO or the repository: `dist/SSX3.app` on macOS, one executable on Linux and
-Windows (`tools/bundle/Dockerfile` builds the Linux one anywhere). It contains the game: for
-your own use only, do not share it.
-
-**Optional: SSX Tricky courses.** This fork also imports the eleven playable
-Tricky worlds into Single Event as **Peak Tricky**. After the setup above, place
-your own SSX Tricky (USA, `SLUS_203.26`) image in the repository root as
-`SSX Tricky (USA).iso`, then run:
+Same steps in a terminal, with `python3` instead of `python`:
 
 ```sh
-python3 tools/prepare_tricky_tracks.py   # Windows: python instead of python3
+git clone --branch v0.1.2 https://github.com/npiriou/ssx3-decomp-more.git
+cd ssx3-decomp-more
+# copy your images here as "SSX 3 (USA).iso" and "SSX Tricky (USA).iso"
+python3 tools/setup.py
+python3 tools/prepare_tricky_tracks.py
 cargo run --profile game -p ssx3
 ```
 
-Select **Single Event → Peak Tricky → Race or Freestyle**. Set `SSX_TRICKY_ISO`
-if that image is elsewhere. Imported assets stay local under `.cache/`;
-they are regenerated from each player's discs. See
-[`docs/modding/custom-tracks.md`](docs/modding/custom-tracks.md) for details
-and current limitations.
+On Linux, first install `pkg-config`, `libasound2-dev` and `libudev-dev`.
 
-**Updating from v0.1.0:** rebuild the game and run
-`python3 tools/prepare_tricky_tracks.py` again (Windows: `python`). This
-regenerates existing Tricky archives with corrected moving-object trajectories.
-The importer detects the changed converter and rebuilds outdated archives.
+**Disc images somewhere else?** Point to them instead of copying them. In PowerShell:
+`$env:SSX3_ISO = "D:\isos\ssx3.iso"` and `$env:SSX_TRICKY_ISO = "D:\isos\tricky.iso"`.
+On macOS/Linux, use `export SSX3_ISO=...` and `export SSX_TRICKY_ISO=...`.
 
-## Playing
+### Playing again later
 
-A controller is picked up automatically (buttons map by position: bottom ✕, right ○, left
-□, top △).
+From the `ssx3-decomp-more` folder, just run:
+
+```sh
+cargo run --profile game -p ssx3
+```
+
+## How to play
+
+Pick your rider, then go to **Single Event → Peak Tricky**. Peak Tricky sits right below
+Peak 1. Choose **Race** or **Freestyle**, then a course. Your SSX 3 career, saves and original
+events are untouched; the Tricky courses live alongside them.
+
+A controller is picked up automatically. Buttons map by position: bottom ✕, right ○, left □,
+top △.
 
 | Keyboard | PS2 | | Keyboard | |
 | --- | --- | --- | --- | --- |
-| Arrows | D-pad | | F10 | Settings (pauses) |
-| I / J / K / L | Left stick: up / left / down / right | | | |
-| X / S / Z / A | ✕ / ○ / □ / △ | | F11 | Fullscreen |
-| Q / W, 1 / 2 | L1 / R1, L2 / R2 | | F12 | Screenshot |
+| Arrows | D-pad | | **F10** | Settings (pauses the game) |
+| I / J / K / L | Left stick: up / left / down / right | | **F11** | Fullscreen |
+| X / S / Z / A | ✕ / ○ / □ / △ | | **F12** | Screenshot |
+| Q / W, 1 / 2 | L1 / R1, L2 / R2 | | | |
 | Enter / Right Shift | Start / Select | | | |
 
-Most options are in the settings overlay (F10) and are saved to `saves/ssx3-settings.cfg`;
-saves go to `saves/ssx3-mc0.ps2`. Every option is also an environment variable, e.g.
-`SSX3_SKIP_MOVIES=1`, `SSX3_PAD2=1` (second player), `SSX3_TICK_HZ=120`,
-`SSX3_RENDER_SIZE=2560x1080`, `SSX3_FOV=1.2`. `SSX3_EVENT=BRA2 SSX3_RIDER=moby`
-boots straight into an event (here Metro City as Moby), skipping the memory card, the title and the menus. Full list, texture packs and the
-emulated reference paths: [`docs/options.md`](docs/options.md).
+**F10** opens the settings: resolution (including widescreen and ultrawide), field of view,
+game rate (60 to 240 Hz), anti-aliasing, draw distance and more. Settings are saved to
+`saves/ssx3-settings.cfg`; your memory card is `saves/ssx3-mc0.ps2`. Every option is listed in
+[`docs/options.md`](docs/options.md).
 
-## Architecture
+**Shortcut:** start straight into a course without going through the menus:
 
-| Crate | Role |
-| --- | --- |
-| `ssx3` | Front ends: the windowed `ssx3` (winit + wgpu + gilrs + cpal) and `ssx3-headless`. |
-| `ssx3-game` | The hand-written Rust: game functions in `src/game/<dir>/<unit>.rs` after the C++ source tree, each checked against the generated one; the native draw functions (`packetless`), native libmpeg (`movie.rs`), the native file layer, the tick rate (`tick.rs`). |
-| `ssx3-recomp` | The function inventory, the R5900 decoder, and `recomp-ee`: ~808k instructions in 13.3k functions lowered to structured Rust, sharded into 16 crates under `generated/ee/`. `recomp-iop` does the same for the game's IOP modules. See [`docs/investigation/recompiler-v2.md`](docs/investigation/recompiler-v2.md). |
-| `ssx3-ee-rt` | The EE core the generated code compiles against: `Cpu`, instruction semantics (MMI, bit-exact PS2 float), guest memory, the function table, the `Platform` trait. Kept small so hardware changes never recompile generated code. |
-| `ssx3-ps2` | The platform (`Machine`): an HLE EE kernel (threads, semaphores, alarms), the hardware registers the game touches, SIF and the native IOP services, the frame sink and native DMA kick; the emulated GS, VIF and IPU for the reference path. |
-| `ssx3-gfx` | The native renderer (wgpu): typed frames from the game's draws, the VU1 programs on CPU/GPU, post passes, modern graphics options. |
-| `ssx3-render` | The typed frame (captured draws, the frame build) and the VU1 rendering programs as readable Rust. |
-| `ssx3-mpeg` | The native MPEG-2 movie decoder. |
-| `ssx3-snd` | The native sound driver (EA's IOP SNDDRV in Rust). |
-| `ssx3-mc` | The memory card: the PS2 card filesystem on the raw `.ps2` image, answering libmc as MCMAN/MCSERV do (byte-identical saves). |
-| `ssx3-vu` | VU0/VU1: registers, pipeline timing, the translated microcode (`generated/vu/`). |
-| `ssx3-web`, `ssx3-vuworker` | The browser build: the single-thread form of the generated code as WebAssembly, drawn with WebGPU from a Web Worker; VU1 jobs in a worker of their own. |
-| `ssx3-iop`, `ssx3-gs` | Reference paths only: the IOP runtime for the recompiled IRX modules, and the Graphics Synthesizer model (verification builds, `emu-gs`). |
-| `ssx3-core`, `ssx3-runtime` | Machine-model and execution-state scaffolding (memory map, ISO reading). |
+```powershell
+$env:SSX3_EVENT = "ALOHA:race"     # macOS/Linux: SSX3_EVENT=ALOHA:race cargo run --profile game -p ssx3
+cargo run --profile game -p ssx3
+Remove-Item Env:SSX3_EVENT
+```
 
-The game's threads run as coroutines (one stack each, `corosensei`) on the host thread that
-drives frames, so a thread switch is a stack switch and a guest call is a plain Rust call.
-`recomp-ee --unwind` generates the single-thread resumable form for the browser, using the
-unwind/trampoline model from [ps2-web-recomp](https://github.com/snuri00/ps2-web-recomp)
-(MIT). More in [`docs/architecture.md`](docs/architecture.md).
+Course codes: `GARI`, `SNOW`, `ELYSIUM`, `MESA`, `MERQUER`, `MEGAPLE`, `ALOHA`, `ALASKA`,
+`UNTRACK`, `PIPE`, `TRICK`, each followed by `:race` or `:freestyle`.
 
-## Tools
+![Snowdream, crossing the finish line](docs/images/tricky/finish.jpg)
 
-Mostly Python 3, run from the repository root.
+## Updating
 
-| Area | Tools |
-| --- | --- |
-| Setup and packaging | `setup.py` (extract, check, recompile; `bootstrap.sh` and `extract-from-iso.sh` are the POSIX-shell versions), `bundle.py` (standalone builds; `bundle_icon.py` makes the icon from the game's logo, `bundle/Dockerfile` is a Linux build environment), `upscale-textures.py` (AI-upscaled texture packs). |
-| Porting to hand-written Rust | `pick_wave.py` (choose the next functions by runtime hotness from a `callgraph.py`/`SSX3_CALLPROF` profile), `refsrc.py`, `refbody.py`, `refindex.py`, `refdossier2.py` (look up the matching C++ decompilation and write per-function dossiers), `integrate_wave.py` (install ported modules: regenerate, test, build, RAM gate), `reorg_modules.py` (move ports into the source-tree layout). |
-| Verification | `scenarios.py` (scripted headless scenarios), `bisect_overrides.py` (find the port that makes a run differ), `compare-file-logs.py`, `vu-diff/` (our VU against ps2-web-recomp's interpreter, step by step), `run-headless.sh`, `contact_sheet.py` (a page of headless screenshots). |
-| Tick rate | `scan_framerate.py`, `scan_tick_patterns.py` (find 60 Hz assumptions), `tick_ab.py` (the same race at 60 Hz and N Hz, side by side). |
-| Ghidra and inspection | `export-ghidra-functions.py`, `export-ghidra-boundaries.py`, `export-ghidra-disasm.py`, `import-ghidra-names.py`, `ghidra_create_discovered.py` (keep the function inventory and Ghidra in sync), `iso-ls.py` (files on the disc), `mcls.py` (files on a memory card image), `pine.py` (read and write PCSX2's memory for comparisons). |
+```sh
+git fetch --tags
+git checkout v0.1.2        # or whichever release is newest
+python tools/setup.py
+python tools/prepare_tricky_tracks.py
+cargo run --profile game -p ssx3
+```
 
-## Contributing
+(`python3` on macOS/Linux.) The course converter only rebuilds what changed, so re-running it
+is cheap. Run it after every update anyway, since releases sometimes fix how courses are
+converted. The release notes say when that matters.
 
-- **Docs:** [`docs/architecture.md`](docs/architecture.md) (how it fits together),
-  [`docs/development.md`](docs/development.md) (headless runs, verification, debugging,
-  Ghidra), [`docs/plans/`](docs/plans/) (roadmap and active plans).
-- **Porting functions to hand-written Rust:**
-  [`docs/investigation/phase2-worker-guide.md`](docs/investigation/phase2-worker-guide.md)
-  and [`AGENTS.md`](AGENTS.md). Ports live in `crates/ssx3-game`, are registered in
-  `overrides.txt`, and each has a differential test against the generated code. The C++
-  decompilation [DevvyDont/ssx3](https://github.com/DevvyDont/ssx3) is a readability aid;
-  the generated code is the authority.
-- **Exactness is the rule.** A scripted headless race must give identical RAM before and
-  after a change unless the change is meant to alter behaviour
-  (`python3 tools/integrate_wave.py gate`).
-- **CI** builds and tests every crate that doesn't need the disc (`python3 tools/setup.py
-  --stubs-only` gives the same setup locally). Changes to `ssx3-game` or the game itself
-  need the differential tests and the RAM gate, run locally.
-- **Never commit game material**: the disc or its files, `generated/` code, disassembly,
-  RAM/VRAM dumps, or screenshots of large parts of the game.
+## Known issues
+
+This is a work in progress. The courses load and play from start to finish, but not
+everything from Tricky is reproduced yet:
+
+- **Your times on Tricky courses aren't saved.** Results show at the finish, but nothing goes
+  to the leaderboards or your career.
+- **The camera sometimes clips into scenery** in tight spots, for example Mesablanca's wooden
+  boardwalk and Alaska's ice portal.
+- **Untracked's race start can look broken**: the rider pack overlaps at the gate.
+- **Some rails don't always catch** on Elysium Alps and on Alaska's ice ledges.
+- **Some breakable glass shortcuts** don't always break.
+- **"Next Event" into Pipedream Freestyle can hang** on the loading screen. Quit to the menu
+  and pick it from Peak Tricky instead.
+- It's **SSX 3's gameplay on Tricky's courses**. Riders, physics, tricks, ubers and AI are
+  SSX 3's; Tricky's rider roster and trick system aren't imported.
+- The standalone build made by `tools/bundle.py` only packs SSX 3, not the Tricky courses. Play
+  from the repository folder.
+
+Found something else? When you report it, say which course and mode, and roughly where it
+happened.
+
+## Credits
+
+- **[Anders Fischer-Nielsen](https://github.com/andersfischernielsen)** and the
+  [ssx3-decomp](https://github.com/andersfischernielsen/ssx3-decomp) contributors, who made
+  SSX 3 run natively. Everything here is built on their work; see that repository for the port
+  itself, its architecture and how to contribute to it.
+- **[DevvyDont/ssx3](https://github.com/DevvyDont/ssx3)**: the C++ decompilation used as a
+  reading aid.
+- **[GlitcherOG/SSX-Library](https://github.com/GlitcherOG/SSX-Library)**: the reference for
+  SSX Tricky's file formats.
+- **[swax/OpenSlope](https://github.com/swax/OpenSlope)**: research on Tricky's boost volumes.
+
+For the technical details of how the courses are converted (terrain, collisions, rails, AI
+routes, object scripts), see [`docs/modding/custom-tracks.md`](docs/modding/custom-tracks.md).
+
+Licensed under the [MIT License](LICENSE). This covers the code in this repository, not any EA game material.
